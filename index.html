@@ -344,7 +344,7 @@ async function doLogin() {
     btn.disabled=false; btn.innerHTML='<i class="fas fa-sign-in-alt mr-2"></i>เข้าสู่ระบบ';
     if (error||!data) { err.textContent='ไม่พบผู้ใช้งาน หรือบัญชีถูกระงับ'; err.classList.remove('hidden'); return; }
     if (data.password!==pwd) { err.textContent='รหัสผ่านไม่ถูกต้อง'; err.classList.remove('hidden'); return; }
-    _sess = { username:data.username, driver_name:data.driver_name, truck_plate:data.truck_plate };
+    _sess = { username:data.username, driver_name:data.driver_name, driver_id:data.driver_id };
     sessSave(_sess);
     bootMain();
 }
@@ -361,7 +361,7 @@ function bootMain() {
     document.getElementById('screen-login').classList.remove('active');
     document.getElementById('screen-main').classList.add('active');
     document.getElementById('hdr-name').textContent  = _sess.driver_name || _sess.username;
-    document.getElementById('hdr-truck').textContent = _sess.truck_plate ? '🚛 '+_sess.truck_plate : '– ไม่ระบุรถ –';
+    document.getElementById('hdr-truck').textContent = '– รอโหลดแผน –';
     hideLoad();
     // Default hist dates
     var today = new Date().toISOString().split('T')[0];
@@ -393,28 +393,35 @@ var _plans = [], _confs = {};
 
 async function loadPlan() {
     var today = new Date().toISOString().split('T')[0];
-    var truck = _sess.truck_plate;
     document.getElementById('plan-list').innerHTML = '<div class="text-center py-12 text-slate-500"><i class="fas fa-spinner fa-spin text-2xl mb-2 block"></i><p class="text-sm font-bold">กำลังโหลด...</p></div>';
     document.getElementById('stat-total').textContent='–';
     document.getElementById('stat-done').textContent='0';
     document.getElementById('stat-fail').textContent='0';
 
-    if (!truck) { renderPlan([]); return; }
+    if (!_sess.driver_id) { renderPlan([]); return; }
 
     showLoad();
     var {data:plans, error} = await _sb.from('logistic_plans')
         .select('plan_id,plan_date,status,truck_plate,child_plate,driver_id,shops,is_mother,is_child')
         .eq('plan_date', today)
         .neq('status','success')
-        .or('truck_plate.eq.'+truck+',child_plate.eq.'+truck);
+        .eq('driver_id', _sess.driver_id);
     hideLoad();
 
     if (error) { showToast('❌ โหลดแผนไม่สำเร็จ',true); renderPlan([]); return; }
     _plans = plans||[];
 
+    // Show truck from plan in header
+    if (_plans.length) {
+        var trucks = Array.from(new Set(_plans.map(function(p){ return [p.truck_plate,p.child_plate].filter(Boolean); }).flat())).join(', ');
+        document.getElementById('hdr-truck').textContent = trucks ? '🚛 '+trucks : '– ไม่ระบุรถ –';
+    } else {
+        document.getElementById('hdr-truck').textContent = '– ไม่มีแผนวันนี้ –';
+    }
+
     // Populate worklog plan selector
     var sel=document.getElementById('wl-plan');
-    if(sel) { sel.innerHTML='<option value="">– ไม่ระบุแผน –</option>'+_plans.map(function(p){return '<option value="'+esc(p.plan_id)+'">'+esc(p.plan_id)+'</option>';}).join(''); }
+    if(sel) { sel.innerHTML='<option value="">– ไม่ระบุแผน –</option>'+_plans.map(function(p){return '<option value="'+esc(p.plan_id)+'">'+esc(p.plan_id)+(p.truck_plate?' ('+esc(p.truck_plate)+')':'')+'</option>';}).join(''); }
 
     if (!_plans.length) { renderPlan([]); return; }
 
@@ -586,7 +593,10 @@ function wlCalc() {
 
 async function wlSave() {
     var today=new Date().toISOString().split('T')[0];
-    var payload={driver_username:_sess.username, plan_id:document.getElementById('wl-plan').value||'',
+    var planId=document.getElementById('wl-plan').value||'';
+    var planRow=_plans.find(function(p){return p.plan_id===planId;})||{};
+    var truckPlate=planRow.truck_plate||'';
+    var payload={driver_username:_sess.username, plan_id:planId, truck_plate:truckPlate,
         work_date:today, odometer_start:parseFloat(document.getElementById('wl-odom-s').value)||0,
         odometer_end:parseFloat(document.getElementById('wl-odom-e').value)||0,
         time_depart:document.getElementById('wl-dep').value||'',

@@ -3,12 +3,13 @@
 -- ============================================================
 
 -- 1. driver_users — WMS admin creates/manages driver accounts
+--    driver_id matches logi_drivers.id (the primary key)
 CREATE TABLE IF NOT EXISTS driver_users (
   id           SERIAL PRIMARY KEY,
   username     TEXT UNIQUE NOT NULL,
   password     TEXT NOT NULL,
   driver_name  TEXT NOT NULL DEFAULT '',
-  truck_plate  TEXT NOT NULL DEFAULT '',
+  driver_id    TEXT NOT NULL DEFAULT '',   -- matches logi_drivers.id
   active       BOOLEAN NOT NULL DEFAULT true,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -29,7 +30,8 @@ CREATE TABLE IF NOT EXISTS delivery_confirmations (
   note            TEXT NOT NULL DEFAULT '',
   driver_username TEXT NOT NULL DEFAULT '',
   confirmed_at    TIMESTAMPTZ,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (plan_id, shop_seq)
 );
 ALTER TABLE delivery_confirmations ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "delivery_confirmations_all" ON delivery_confirmations;
@@ -46,13 +48,15 @@ CREATE TABLE IF NOT EXISTS driver_work_logs (
   driver_username  TEXT NOT NULL,
   plan_id          TEXT NOT NULL DEFAULT '',
   work_date        DATE NOT NULL,
+  truck_plate      TEXT NOT NULL DEFAULT '',  -- รถที่ขับจริงวันนั้น (จากแผน)
   odometer_start   NUMERIC NOT NULL DEFAULT 0,
   odometer_end     NUMERIC NOT NULL DEFAULT 0,
   time_depart      TEXT NOT NULL DEFAULT '',
   time_arrive      TEXT NOT NULL DEFAULT '',
   note             TEXT NOT NULL DEFAULT '',
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (driver_username, work_date)
 );
 ALTER TABLE driver_work_logs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "driver_work_logs_all" ON driver_work_logs;
