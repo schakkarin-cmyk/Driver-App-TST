@@ -10,681 +10,732 @@
   <title>TST Driver App</title>
   <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', 'Helvetica Neue', sans-serif; background: #0d1b2a; color: #e2e8f0; margin: 0; padding: 0; }
-    .screen { display: none; min-height: 100dvh; flex-direction: column; }
-    .screen.active { display: flex; }
-    .content-area { flex: 1; overflow-y: auto; padding-bottom: 72px; }
-    .status-pending   { background: #1e293b; border-color: #334155; }
-    .status-delivered { background: #064e3b; border-color: #059669; }
-    .status-failed    { background: #450a0a; border-color: #dc2626; }
-    @keyframes slide-up { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    .slide-up { animation: slide-up 0.2s ease; }
-    #toast { position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%); z-index: 9999; pointer-events: none; white-space: nowrap; transition: opacity 0.3s; }
-    #loading-overlay { position: fixed; inset: 0; background: rgba(13,27,42,0.88); z-index: 9998; display: none; align-items: center; justify-content: center; }
-    #loading-overlay.show { display: flex; }
-    #modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 9990; display: none; align-items: flex-end; }
-    #modal-overlay.open { display: flex; }
-    #modal-box { width: 100%; max-height: 88dvh; background: #1e293b; border-radius: 20px 20px 0 0; overflow-y: auto; padding: 24px 20px 32px; }
-    input[type=time]::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.5); }
-    ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    *{-webkit-tap-highlight-color:transparent;box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Segoe UI','Helvetica Neue',sans-serif;background:#0d1b2a;color:#e2e8f0;}
+    .screen{display:none;min-height:100dvh;flex-direction:column;}
+    .screen.active{display:flex;}
+    .content-area{flex:1;overflow-y:auto;padding-bottom:72px;}
+    /* Trip detail full-screen slide */
+    #trip-screen{position:fixed;inset:0;background:#0f172a;z-index:500;display:none;flex-direction:column;transform:translateX(100%);transition:transform 0.28s cubic-bezier(.4,0,.2,1);}
+    #trip-screen.open{display:flex;transform:translateX(0);}
+    /* Status cards */
+    .sc-pending  {background:#1e293b;border-color:#334155;}
+    .sc-delivered{background:#064e3b;border-color:#059669;}
+    .sc-failed   {background:#450a0a;border-color:#dc2626;}
+    /* Animations */
+    @keyframes fadeUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
+    .fade-up{animation:fadeUp .22s ease;}
+    /* Toast */
+    #toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9999;pointer-events:none;transition:opacity .3s;white-space:nowrap;}
+    /* Loading */
+    #ld{position:fixed;inset:0;background:rgba(13,27,42,.88);z-index:9998;display:none;align-items:center;justify-content:center;}
+    #ld.on{display:flex;}
+    /* Modal */
+    #mod-ov{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9990;display:none;align-items:flex-end;}
+    #mod-ov.open{display:flex;}
+    #mod-box{width:100%;max-height:88dvh;background:#1e293b;border-radius:20px 20px 0 0;overflow-y:auto;padding:24px 20px 36px;}
+    /* Progress bar */
+    .prog-bg{background:#334155;border-radius:99px;height:6px;overflow:hidden;}
+    .prog-fill{height:100%;border-radius:99px;transition:width .4s ease;}
+    /* input time picker icon */
+    input[type=time]::-webkit-calendar-picker-indicator{filter:invert(.5);}
+    ::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-thumb{background:#334155;border-radius:4px;}
   </style>
 </head>
 <body>
 
-<!-- LOADING OVERLAY -->
-<div id="loading-overlay">
-  <div class="text-center">
-    <i class="fas fa-truck-moving text-4xl text-emerald-400 mb-3 block" style="animation:bounce 1s infinite;"></i>
-    <p class="text-emerald-300 font-bold text-sm tracking-wide">กำลังโหลด...</p>
-  </div>
-</div>
+<!-- LOADING -->
+<div id="ld"><div class="text-center"><i class="fas fa-truck-moving text-4xl text-emerald-400 block" style="animation:bounce 1s infinite;margin-bottom:12px;"></i><p class="text-emerald-300 font-bold text-sm">กำลังโหลด...</p></div></div>
 
 <!-- TOAST -->
-<div id="toast" class="hidden">
-  <div id="toast-inner" class="px-5 py-3 rounded-2xl font-bold text-sm shadow-2xl"></div>
-</div>
+<div id="toast" class="hidden"><div id="ti" class="px-5 py-3 rounded-2xl font-bold text-sm shadow-2xl"></div></div>
 
-<!-- MODAL (Status Update) -->
-<div id="modal-overlay">
-  <div id="modal-box">
-    <div id="modal-content"></div>
-  </div>
-</div>
+<!-- STATUS MODAL -->
+<div id="mod-ov"><div id="mod-box"><div id="mod-c"></div></div></div>
 
-<!-- ════════════════════════════════════════════════════════ -->
-<!--  SCREEN: LOGIN                                          -->
-<!-- ════════════════════════════════════════════════════════ -->
-<div id="screen-login" class="screen active items-center justify-center px-6 py-8"
-     style="background:linear-gradient(155deg,#0d1b2a 0%,#1e3a8a 55%,#065f46 100%);min-height:100dvh;">
-  <div class="w-full max-w-sm">
-
-    <div class="text-center mb-8">
-      <div class="w-20 h-20 mx-auto rounded-2xl flex items-center justify-center mb-4 shadow-xl"
-           style="background:rgba(5,150,105,0.18);border:2px solid rgba(5,150,105,0.4);">
-        <i class="fas fa-truck text-4xl text-emerald-400"></i>
+<!-- ══════════════════════════════════════════════ -->
+<!--  LOGIN                                        -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="sc-login" class="screen active" style="background:linear-gradient(155deg,#0d1b2a 0%,#1e3a8a 55%,#065f46 100%);align-items:center;justify-content:center;padding:24px;">
+  <div style="width:100%;max-width:360px;">
+    <div style="text-align:center;margin-bottom:32px;">
+      <div style="width:80px;height:80px;margin:0 auto 16px;border-radius:20px;background:rgba(5,150,105,.18);border:2px solid rgba(5,150,105,.4);display:flex;align-items:center;justify-content:center;">
+        <i class="fas fa-truck" style="font-size:36px;color:#34d399;"></i>
       </div>
-      <h1 class="text-2xl font-black text-white tracking-wide">TST Driver</h1>
-      <p class="text-emerald-300 text-sm font-semibold mt-1">ระบบสำหรับพนักงานขับรถ</p>
+      <h1 style="font-size:24px;font-weight:900;color:#fff;">TST Driver</h1>
+      <p style="color:#6ee7b7;font-size:13px;font-weight:600;margin-top:4px;">ระบบสำหรับพนักงานขับรถ</p>
     </div>
-
-    <div class="rounded-2xl p-6 space-y-4" style="background:rgba(255,255,255,0.08);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.12);">
-      <div>
-        <label class="text-xs font-black text-emerald-300 uppercase mb-2 block tracking-wider">ชื่อผู้ใช้</label>
-        <input id="inp-user" type="text" inputmode="text" autocomplete="username"
-          class="w-full rounded-xl px-4 py-3 font-bold text-white text-base outline-none transition-all"
-          style="background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.2);"
-          placeholder="กรอกชื่อผู้ใช้">
+    <div style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:24px;">
+      <label style="display:block;font-size:11px;font-weight:900;color:#6ee7b7;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">ชื่อผู้ใช้</label>
+      <input id="iu" type="text" autocomplete="username" placeholder="กรอกชื่อผู้ใช้"
+        style="width:100%;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.2);border-radius:12px;padding:12px 16px;color:#fff;font-weight:700;font-size:16px;outline:none;margin-bottom:16px;">
+      <label style="display:block;font-size:11px;font-weight:900;color:#6ee7b7;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">รหัสผ่าน</label>
+      <div style="position:relative;margin-bottom:16px;">
+        <input id="ip" type="password" autocomplete="current-password" placeholder="กรอกรหัสผ่าน"
+          style="width:100%;background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.2);border-radius:12px;padding:12px 48px 12px 16px;color:#fff;font-weight:700;font-size:16px;outline:none;">
+        <button onclick="togglePwd()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:rgba(255,255,255,.5);cursor:pointer;padding:4px;">
+          <i class="fas fa-eye" id="pe"></i>
+        </button>
       </div>
-      <div>
-        <label class="text-xs font-black text-emerald-300 uppercase mb-2 block tracking-wider">รหัสผ่าน</label>
-        <div class="relative">
-          <input id="inp-pwd" type="password" autocomplete="current-password"
-            class="w-full rounded-xl px-4 py-3 font-bold text-white text-base outline-none pr-12 transition-all"
-            style="background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.2);"
-            placeholder="กรอกรหัสผ่าน">
-          <button type="button" onclick="togglePwd()"
-            class="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-white/50 hover:text-white/80">
-            <i class="fas fa-eye text-sm" id="pwd-eye"></i>
-          </button>
-        </div>
-      </div>
-      <div id="login-err" class="hidden text-rose-400 text-sm font-bold text-center bg-rose-900/30 rounded-xl py-2"></div>
-      <button id="btn-login" onclick="doLogin()"
-        class="w-full py-3.5 rounded-xl font-black text-white text-base transition-all active:scale-95 shadow-lg flex items-center justify-center gap-2"
-        style="background:#059669;">
+      <div id="le" style="display:none;background:rgba(220,38,38,.2);color:#fca5a5;font-size:13px;font-weight:700;text-align:center;border-radius:12px;padding:10px;margin-bottom:12px;"></div>
+      <button id="bl" onclick="doLogin()"
+        style="width:100%;background:#059669;border:none;border-radius:12px;padding:14px;color:#fff;font-weight:900;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
         <i class="fas fa-sign-in-alt"></i> เข้าสู่ระบบ
       </button>
     </div>
-
-    <p class="text-center text-white/25 text-xs mt-6 font-semibold">TST Standard Steel &bull; Powered by Supabase</p>
+    <p style="text-align:center;color:rgba(255,255,255,.2);font-size:11px;margin-top:20px;">TST Standard Steel &bull; Powered by Supabase</p>
   </div>
 </div>
 
-<!-- ════════════════════════════════════════════════════════ -->
-<!--  SCREEN: MAIN                                           -->
-<!-- ════════════════════════════════════════════════════════ -->
-<div id="screen-main" class="screen" style="background:#0f172a;">
+<!-- ══════════════════════════════════════════════ -->
+<!--  MAIN                                         -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="sc-main" class="screen" style="background:#0f172a;">
 
   <!-- HEADER -->
-  <div class="px-4 py-3 flex items-center justify-between shrink-0"
-       style="background:#0d1b2a;border-bottom:1px solid rgba(255,255,255,0.06);">
-    <div class="flex items-center gap-3">
-      <div class="w-10 h-10 rounded-xl bg-emerald-800 flex items-center justify-center shrink-0">
-        <i class="fas fa-id-badge text-emerald-200 text-lg"></i>
+  <div style="background:#0d1b2a;border-bottom:1px solid rgba(255,255,255,.06);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="width:40px;height:40px;border-radius:12px;background:#065f46;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <i class="fas fa-id-badge" style="color:#6ee7b7;font-size:18px;"></i>
       </div>
-      <div class="min-w-0">
-        <div class="font-black text-white text-sm truncate" id="hdr-name">–</div>
-        <div class="text-xs text-emerald-400 font-bold" id="hdr-truck">–</div>
+      <div style="min-width:0;">
+        <div id="hn" style="font-weight:900;color:#fff;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">–</div>
+        <div id="ht" style="font-size:11px;color:#34d399;font-weight:700;">–</div>
       </div>
     </div>
-    <div class="flex items-center gap-2 shrink-0">
-      <div class="text-right">
-        <div class="text-xs font-black text-slate-300" id="hdr-date">–</div>
-        <div class="text-[10px] text-slate-500 font-semibold" id="hdr-time">–</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+      <div style="text-align:right;">
+        <div id="hd" style="font-size:12px;font-weight:900;color:#cbd5e1;">–</div>
+        <div id="htime" style="font-size:10px;color:#64748b;font-weight:600;">–</div>
       </div>
-      <button onclick="doLogout()"
-        class="w-9 h-9 rounded-xl flex items-center justify-center text-slate-500 hover:text-rose-400 transition-all"
-        style="background:#1e293b;">
-        <i class="fas fa-sign-out-alt text-sm"></i>
+      <button onclick="doLogout()" style="width:36px;height:36px;border-radius:10px;background:#1e293b;border:none;color:#64748b;cursor:pointer;display:flex;align-items:center;justify-content:center;">
+        <i class="fas fa-sign-out-alt" style="font-size:14px;"></i>
       </button>
     </div>
   </div>
 
-  <!-- CONTENT -->
+  <!-- TAB CONTENT -->
   <div class="content-area">
 
-    <!-- ── TAB: แผนวันนี้ ─────────────────────── -->
-    <div id="tab-plan" class="tab-pane p-4 space-y-3">
+    <!-- ── แผนวันนี้ ─────────────────── -->
+    <div id="tab-plan" class="tab-pane" style="padding:16px;">
 
-      <!-- Stats -->
-      <div class="grid grid-cols-3 gap-2">
-        <div class="rounded-xl p-3 text-center" style="background:#1e293b;">
-          <div class="text-2xl font-black text-white" id="stat-total">–</div>
-          <div class="text-[10px] text-slate-500 font-bold mt-0.5">จุดส่งทั้งหมด</div>
+      <!-- Summary row -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;">
+        <div style="background:#1e293b;border-radius:14px;padding:12px;text-align:center;">
+          <div id="st-total" style="font-size:22px;font-weight:900;color:#fff;">–</div>
+          <div style="font-size:10px;color:#64748b;font-weight:700;margin-top:2px;">เที่ยววิ่ง</div>
         </div>
-        <div class="rounded-xl p-3 text-center" style="background:#064e3b;">
-          <div class="text-2xl font-black text-emerald-400" id="stat-done">0</div>
-          <div class="text-[10px] text-slate-400 font-bold mt-0.5">ส่งสำเร็จ</div>
+        <div style="background:#064e3b;border-radius:14px;padding:12px;text-align:center;">
+          <div id="st-done" style="font-size:22px;font-weight:900;color:#34d399;">0</div>
+          <div style="font-size:10px;color:#6ee7b7;font-weight:700;margin-top:2px;">จุดส่งสำเร็จ</div>
         </div>
-        <div class="rounded-xl p-3 text-center" style="background:#450a0a;">
-          <div class="text-2xl font-black text-rose-400" id="stat-fail">0</div>
-          <div class="text-[10px] text-slate-400 font-bold mt-0.5">ส่งไม่ได้</div>
+        <div style="background:#450a0a;border-radius:14px;padding:12px;text-align:center;">
+          <div id="st-fail" style="font-size:22px;font-weight:900;color:#f87171;">0</div>
+          <div style="font-size:10px;color:#fca5a5;font-weight:700;margin-top:2px;">จุดส่งไม่ได้</div>
         </div>
       </div>
 
-      <!-- Refresh button -->
-      <button onclick="loadPlan()" class="w-full py-2 rounded-xl font-bold text-sm text-slate-400 flex items-center justify-center gap-2 active:scale-95 transition-all" style="background:#1e293b;">
-        <i class="fas fa-sync-alt text-xs"></i> รีเฟรชแผน
+      <!-- Plan cards -->
+      <div id="plan-cards"></div>
+
+      <button onclick="loadPlan()" style="width:100%;margin-top:8px;background:#1e293b;border:none;border-radius:12px;padding:10px;color:#64748b;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+        <i class="fas fa-sync-alt" style="font-size:11px;"></i> รีเฟรช
       </button>
-
-      <!-- Plan list -->
-      <div id="plan-list"></div>
-
     </div>
 
-    <!-- ── TAB: บันทึกงาน ─────────────────────── -->
-    <div id="tab-worklog" class="tab-pane hidden p-4 space-y-3">
-
-      <div class="rounded-2xl p-4 space-y-3" style="background:#1e293b;">
-        <h3 class="font-black text-white text-sm flex items-center gap-2">
-          <i class="fas fa-tachometer-alt text-emerald-400"></i> บันทึกไมล์ & เวลา
-          <span class="text-[10px] text-slate-500 font-semibold ml-auto" id="wl-saved-badge"></span>
-        </h3>
-
+    <!-- ── บันทึกงาน ─────────────────── -->
+    <div id="tab-worklog" class="tab-pane" style="display:none;padding:16px;">
+      <div style="background:#1e293b;border-radius:20px;padding:20px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <h3 style="font-weight:900;color:#fff;font-size:14px;display:flex;align-items:center;gap:8px;">
+            <i class="fas fa-tachometer-alt" style="color:#34d399;"></i> บันทึกไมล์ & เวลา
+          </h3>
+          <span id="wl-badge" style="font-size:10px;color:#64748b;font-weight:600;"></span>
+        </div>
+        <label style="display:block;font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase;margin-bottom:6px;">เชื่อมกับแผน</label>
+        <select id="wl-plan" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:12px;padding:10px 12px;color:#fff;font-weight:700;font-size:13px;outline:none;margin-bottom:16px;">
+          <option value="">– ไม่ระบุแผน –</option>
+        </select>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <label style="display:block;font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase;margin-bottom:6px;">ไมล์เริ่ม</label>
+            <input id="wl-s" type="number" inputmode="numeric" placeholder="0"
+              style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:12px;padding:10px 12px;color:#fff;font-weight:900;font-size:14px;text-align:right;outline:none;">
+          </div>
+          <div>
+            <label style="display:block;font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase;margin-bottom:6px;">ไมล์ปลาย</label>
+            <input id="wl-e" type="number" inputmode="numeric" placeholder="0" oninput="wlCalc()"
+              style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:12px;padding:10px 12px;color:#fff;font-weight:900;font-size:14px;text-align:right;outline:none;">
+          </div>
+        </div>
+        <div style="background:#0f172a;border-radius:12px;padding:10px;text-align:center;margin-bottom:12px;">
+          <span style="color:#94a3b8;font-size:13px;">ระยะทางวันนี้: </span>
+          <span id="wl-km" style="font-weight:900;color:#34d399;font-size:14px;">– กม.</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+          <div>
+            <label style="display:block;font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase;margin-bottom:6px;">เวลาออกงาน</label>
+            <input id="wl-dep" type="time" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:12px;padding:10px 12px;color:#fff;font-weight:700;font-size:13px;outline:none;">
+          </div>
+          <div>
+            <label style="display:block;font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase;margin-bottom:6px;">เวลาเสร็จงาน</label>
+            <input id="wl-arr" type="time" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:12px;padding:10px 12px;color:#fff;font-weight:700;font-size:13px;outline:none;">
+          </div>
+        </div>
         <div>
-          <label class="text-[10px] font-black text-slate-400 uppercase mb-1.5 block">เชื่อมกับแผน</label>
-          <select id="wl-plan" class="w-full rounded-xl px-3 py-2.5 font-bold text-white text-sm outline-none"
-                  style="background:#0f172a;border:1px solid #334155;">
-            <option value="">– ไม่ระบุแผน –</option>
-          </select>
+          <label style="display:block;font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase;margin-bottom:6px;">หมายเหตุ</label>
+          <textarea id="wl-note" rows="2" placeholder="(ถ้ามี)"
+            style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:12px;padding:10px 12px;color:#fff;font-weight:600;font-size:13px;outline:none;resize:none;margin-bottom:16px;"></textarea>
         </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-[10px] font-black text-slate-400 uppercase mb-1.5 block">ไมล์เริ่ม</label>
-            <input id="wl-odom-s" type="number" inputmode="numeric"
-              class="w-full rounded-xl px-3 py-2.5 font-black text-white text-right text-sm outline-none"
-              style="background:#0f172a;border:1px solid #334155;" placeholder="0">
-          </div>
-          <div>
-            <label class="text-[10px] font-black text-slate-400 uppercase mb-1.5 block">ไมล์ปลาย</label>
-            <input id="wl-odom-e" type="number" inputmode="numeric" oninput="wlCalc()"
-              class="w-full rounded-xl px-3 py-2.5 font-black text-white text-right text-sm outline-none"
-              style="background:#0f172a;border:1px solid #334155;" placeholder="0">
-          </div>
-        </div>
-
-        <div class="rounded-xl px-4 py-2.5 text-center text-sm" style="background:#0f172a;">
-          <span class="text-slate-400 font-semibold">ระยะทางวันนี้: </span>
-          <span class="font-black text-emerald-400" id="wl-km">– กม.</span>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-[10px] font-black text-slate-400 uppercase mb-1.5 block">เวลาออกงาน</label>
-            <input id="wl-dep" type="time"
-              class="w-full rounded-xl px-3 py-2.5 font-black text-white text-sm outline-none"
-              style="background:#0f172a;border:1px solid #334155;">
-          </div>
-          <div>
-            <label class="text-[10px] font-black text-slate-400 uppercase mb-1.5 block">เวลาเสร็จงาน</label>
-            <input id="wl-arr" type="time"
-              class="w-full rounded-xl px-3 py-2.5 font-black text-white text-sm outline-none"
-              style="background:#0f172a;border:1px solid #334155;">
-          </div>
-        </div>
-
-        <div>
-          <label class="text-[10px] font-black text-slate-400 uppercase mb-1.5 block">หมายเหตุ</label>
-          <textarea id="wl-note" rows="2"
-            class="w-full rounded-xl px-3 py-2.5 font-semibold text-white text-sm outline-none resize-none"
-            style="background:#0f172a;border:1px solid #334155;" placeholder="(ถ้ามี)"></textarea>
-        </div>
-
-        <button onclick="wlSave()"
-          class="w-full py-3 rounded-xl font-black text-white text-sm active:scale-95 transition-all flex items-center justify-center gap-2"
-          style="background:#059669;">
+        <button onclick="wlSave()" style="width:100%;background:#059669;border:none;border-radius:12px;padding:14px;color:#fff;font-weight:900;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
           <i class="fas fa-save"></i> บันทึกข้อมูล
         </button>
       </div>
-
     </div>
 
-    <!-- ── TAB: ประวัติ ───────────────────────── -->
-    <div id="tab-history" class="tab-pane hidden p-4 space-y-3">
-
-      <div class="flex gap-2 items-center">
-        <input type="date" id="hist-from"
-          class="flex-1 rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none"
-          style="background:#1e293b;border:1px solid #334155;">
-        <input type="date" id="hist-to"
-          class="flex-1 rounded-xl px-3 py-2.5 text-white text-sm font-bold outline-none"
-          style="background:#1e293b;border:1px solid #334155;">
-        <button onclick="histLoad()"
-          class="w-11 h-11 rounded-xl flex items-center justify-center font-black text-white active:scale-95 transition-all shrink-0"
-          style="background:#059669;">
-          <i class="fas fa-search text-sm"></i>
+    <!-- ── ประวัติ ─────────────────────── -->
+    <div id="tab-history" class="tab-pane" style="display:none;padding:16px;">
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <input type="date" id="hf" style="flex:1;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:10px 12px;color:#fff;font-size:13px;font-weight:700;outline:none;">
+        <input type="date" id="ht2" style="flex:1;background:#1e293b;border:1px solid #334155;border-radius:12px;padding:10px 12px;color:#fff;font-size:13px;font-weight:700;outline:none;">
+        <button onclick="histLoad()" style="width:44px;height:44px;background:#059669;border:none;border-radius:12px;color:#fff;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <i class="fas fa-search"></i>
         </button>
       </div>
-
       <div id="hist-list">
-        <div class="text-center py-16 text-slate-600">
-          <i class="fas fa-history text-4xl mb-3 block opacity-30"></i>
-          <p class="font-bold text-sm">เลือกช่วงวันที่แล้วกดค้นหา</p>
+        <div style="text-align:center;padding:60px 0;color:#334155;">
+          <i class="fas fa-history" style="font-size:40px;display:block;margin-bottom:12px;opacity:.4;"></i>
+          <p style="font-weight:700;font-size:13px;">เลือกช่วงวันที่แล้วกดค้นหา</p>
         </div>
       </div>
-
     </div>
 
   </div><!-- end content-area -->
 
   <!-- BOTTOM NAV -->
-  <nav class="fixed bottom-0 left-0 right-0 flex items-stretch" style="background:#0d1b2a;border-top:1px solid rgba(255,255,255,0.07);height:64px;z-index:100;">
-    <button id="nav-plan" onclick="goTab('plan')"
-      class="flex-1 flex flex-col items-center justify-center gap-1 transition-all text-emerald-400">
-      <i class="fas fa-clipboard-list text-lg"></i>
-      <span class="text-[10px] font-black">แผนวันนี้</span>
+  <nav style="position:fixed;bottom:0;left:0;right:0;background:#0d1b2a;border-top:1px solid rgba(255,255,255,.07);height:64px;display:flex;z-index:100;">
+    <button id="nav-plan"    onclick="goTab('plan')"    style="flex:1;border:none;background:none;color:#34d399;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;">
+      <i class="fas fa-clipboard-list" style="font-size:20px;"></i><span style="font-size:10px;font-weight:900;">แผนวันนี้</span>
     </button>
-    <button id="nav-worklog" onclick="goTab('worklog')"
-      class="flex-1 flex flex-col items-center justify-center gap-1 transition-all text-slate-500">
-      <i class="fas fa-tachometer-alt text-lg"></i>
-      <span class="text-[10px] font-black">บันทึกงาน</span>
+    <button id="nav-worklog" onclick="goTab('worklog')" style="flex:1;border:none;background:none;color:#64748b;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;">
+      <i class="fas fa-tachometer-alt" style="font-size:20px;"></i><span style="font-size:10px;font-weight:900;">บันทึกงาน</span>
     </button>
-    <button id="nav-history" onclick="goTab('history')"
-      class="flex-1 flex flex-col items-center justify-center gap-1 transition-all text-slate-500">
-      <i class="fas fa-history text-lg"></i>
-      <span class="text-[10px] font-black">ประวัติ</span>
+    <button id="nav-history" onclick="goTab('history')" style="flex:1;border:none;background:none;color:#64748b;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;">
+      <i class="fas fa-history" style="font-size:20px;"></i><span style="font-size:10px;font-weight:900;">ประวัติ</span>
     </button>
   </nav>
 
-</div><!-- end screen-main -->
+</div><!-- end sc-main -->
 
-<!-- ════════════════════════════════════════════════════════ -->
+<!-- ══════════════════════════════════════════════ -->
+<!--  TRIP DETAIL SCREEN                           -->
+<!-- ══════════════════════════════════════════════ -->
+<div id="trip-screen">
+
+  <!-- Trip header -->
+  <div style="background:#0d1b2a;border-bottom:1px solid rgba(255,255,255,.06);padding:12px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0;">
+    <button onclick="closeTrip()" style="width:36px;height:36px;border-radius:10px;background:#1e293b;border:none;color:#94a3b8;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <i class="fas fa-arrow-left" style="font-size:16px;"></i>
+    </button>
+    <div style="min-width:0;flex:1;">
+      <div id="trip-title" style="font-weight:900;color:#fff;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">–</div>
+      <div id="trip-sub"   style="font-size:11px;color:#64748b;font-weight:600;margin-top:2px;">–</div>
+    </div>
+    <div id="trip-badge" style="flex-shrink:0;"></div>
+  </div>
+
+  <!-- Progress bar -->
+  <div style="padding:12px 16px 0;flex-shrink:0;">
+    <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700;margin-bottom:6px;">
+      <span style="color:#94a3b8;">ความคืบหน้า</span>
+      <span id="trip-prog-txt" style="color:#34d399;font-weight:900;">0 / 0</span>
+    </div>
+    <div class="prog-bg"><div id="trip-prog-bar" class="prog-fill" style="background:#059669;width:0%;"></div></div>
+  </div>
+
+  <!-- Shop list -->
+  <div style="flex:1;overflow-y:auto;padding:12px 16px 24px;" id="trip-shop-list"></div>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════ -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
-// ── Config ────────────────────────────────────────────────
-const SUPA_URL = 'https://lkuunmyrxugsoqwrvdby.supabase.co';
-const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrdXVubXlyeHVnc29xd3J2ZGJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1ODk5ODcsImV4cCI6MjA5NzE2NTk4N30.rpcJKRMDumcsgYx-JrgxFKeO26TKrIULxBJm0jWpBZw';
-const _sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+const SUPA_URL='https://lkuunmyrxugsoqwrvdby.supabase.co';
+const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrdXVubXlyeHVnc29xd3J2ZGJ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1ODk5ODcsImV4cCI6MjA5NzE2NTk4N30.rpcJKRMDumcsgYx-JrgxFKeO26TKrIULxBJm0jWpBZw';
+const _sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 
 // ── Session ───────────────────────────────────────────────
-var _sess = null; // { username, driver_name, truck_plate }
-
-function sessSave(s)  { localStorage.setItem('tst_drv', JSON.stringify(s)); }
-function sessLoad()   { try { return JSON.parse(localStorage.getItem('tst_drv')||'null'); } catch { return null; } }
-function sessClear()  { localStorage.removeItem('tst_drv'); }
+var _sess=null;
+function sS(s){localStorage.setItem('tst_drv',JSON.stringify(s));}
+function sL(){try{return JSON.parse(localStorage.getItem('tst_drv')||'null');}catch{return null;}}
+function sC(){localStorage.removeItem('tst_drv');}
 
 // ── Boot ──────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', function() {
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js').catch(function(){});
-    }
-    _sess = sessLoad();
-    if (_sess && _sess.username) {
-        bootMain();
-    } else {
-        document.getElementById('screen-login').classList.add('active');
-        hideLoad();
-    }
-    // keyboard listeners
-    document.getElementById('inp-user').addEventListener('keydown', function(e){ if(e.key==='Enter') document.getElementById('inp-pwd').focus(); });
-    document.getElementById('inp-pwd').addEventListener('keydown',  function(e){ if(e.key==='Enter') doLogin(); });
-    setInterval(tickClock, 1000); tickClock();
+document.addEventListener('DOMContentLoaded',function(){
+  if('serviceWorker'in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  _sess=sL();
+  if(_sess&&_sess.username) bootMain();
+  else{document.getElementById('sc-login').classList.add('active');hideL();}
+  document.getElementById('iu').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('ip').focus();});
+  document.getElementById('ip').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
+  setInterval(tick,1000);tick();
 });
 
-function tickClock() {
-    var n = new Date();
-    var days = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
-    var mos  = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-    var de = document.getElementById('hdr-date'), te = document.getElementById('hdr-time');
-    if (de) de.textContent = days[n.getDay()] + ' ' + n.getDate() + ' ' + mos[n.getMonth()] + ' ' + (n.getFullYear()+543);
-    if (te) te.textContent = pad(n.getHours())+':'+pad(n.getMinutes());
+function tick(){
+  var n=new Date();
+  var days=['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
+  var mos=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var de=document.getElementById('hd'),te=document.getElementById('htime');
+  if(de)de.textContent=days[n.getDay()]+' '+n.getDate()+' '+mos[n.getMonth()]+' '+(n.getFullYear()+543);
+  if(te)te.textContent=p2(n.getHours())+':'+p2(n.getMinutes());
 }
-function pad(n) { return String(n).padStart(2,'0'); }
+function p2(n){return String(n).padStart(2,'0');}
 
 // ── Login ─────────────────────────────────────────────────
-function togglePwd() {
-    var inp = document.getElementById('inp-pwd'), eye = document.getElementById('pwd-eye');
-    if (inp.type==='password') { inp.type='text'; eye.className='fas fa-eye-slash text-sm'; }
-    else { inp.type='password'; eye.className='fas fa-eye text-sm'; }
+function togglePwd(){
+  var i=document.getElementById('ip'),e=document.getElementById('pe');
+  if(i.type==='password'){i.type='text';e.className='fas fa-eye-slash';}
+  else{i.type='password';e.className='fas fa-eye';}
 }
 
-async function doLogin() {
-    var user = document.getElementById('inp-user').value.trim();
-    var pwd  = document.getElementById('inp-pwd').value;
-    var err  = document.getElementById('login-err');
-    var btn  = document.getElementById('btn-login');
-    err.classList.add('hidden');
-    if (!user || !pwd) { err.textContent='กรุณากรอกข้อมูลให้ครบ'; err.classList.remove('hidden'); return; }
-    btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin mr-2"></i>กำลังเข้าสู่ระบบ...';
-    var {data,error} = await _sb.from('driver_users').select('*').eq('username',user).eq('active',true).maybeSingle();
-    btn.disabled=false; btn.innerHTML='<i class="fas fa-sign-in-alt mr-2"></i>เข้าสู่ระบบ';
-    if (error||!data) { err.textContent='ไม่พบผู้ใช้งาน หรือบัญชีถูกระงับ'; err.classList.remove('hidden'); return; }
-    if (data.password!==pwd) { err.textContent='รหัสผ่านไม่ถูกต้อง'; err.classList.remove('hidden'); return; }
-    _sess = { username:data.username, driver_name:data.driver_name, driver_id:data.driver_id };
-    sessSave(_sess);
-    bootMain();
+async function doLogin(){
+  var user=document.getElementById('iu').value.trim();
+  var pwd=document.getElementById('ip').value;
+  var err=document.getElementById('le'),btn=document.getElementById('bl');
+  err.style.display='none';
+  if(!user||!pwd){err.textContent='กรุณากรอกข้อมูลให้ครบ';err.style.display='block';return;}
+  btn.disabled=true;btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> กำลังเข้าสู่ระบบ...';
+  var {data,error}=await _sb.from('driver_users').select('*').eq('username',user).eq('active',true).maybeSingle();
+  btn.disabled=false;btn.innerHTML='<i class="fas fa-sign-in-alt"></i> เข้าสู่ระบบ';
+  if(error||!data){err.textContent='ไม่พบผู้ใช้งาน หรือบัญชีถูกระงับ';err.style.display='block';return;}
+  if(data.password!==pwd){err.textContent='รหัสผ่านไม่ถูกต้อง';err.style.display='block';return;}
+  _sess={username:data.username,driver_name:data.driver_name,driver_id:data.driver_id};
+  sS(_sess);bootMain();
 }
 
-function doLogout() {
-    if (!confirm('ออกจากระบบ?')) return;
-    sessClear(); _sess=null;
-    document.getElementById('screen-main').classList.remove('active');
-    document.getElementById('screen-login').classList.add('active');
+function doLogout(){
+  if(!confirm('ออกจากระบบ?'))return;
+  sC();_sess=null;
+  document.getElementById('sc-main').classList.remove('active');
+  document.getElementById('sc-login').classList.add('active');
 }
 
 // ── Boot Main ─────────────────────────────────────────────
-function bootMain() {
-    document.getElementById('screen-login').classList.remove('active');
-    document.getElementById('screen-main').classList.add('active');
-    document.getElementById('hdr-name').textContent  = _sess.driver_name || _sess.username;
-    document.getElementById('hdr-truck').textContent = '– รอโหลดแผน –';
-    hideLoad();
-    // Default hist dates
-    var today = new Date().toISOString().split('T')[0];
-    var wago  = new Date(); wago.setDate(wago.getDate()-6);
-    document.getElementById('hist-from').value = wago.toISOString().split('T')[0];
-    document.getElementById('hist-to').value   = today;
-    goTab('plan');
-    loadPlan();
+function bootMain(){
+  document.getElementById('sc-login').classList.remove('active');
+  document.getElementById('sc-main').classList.add('active');
+  document.getElementById('hn').textContent=_sess.driver_name||_sess.username;
+  document.getElementById('ht').textContent='– รอโหลดแผน –';
+  hideL();
+  var today=new Date().toISOString().split('T')[0];
+  var w=new Date();w.setDate(w.getDate()-6);
+  document.getElementById('hf').value=w.toISOString().split('T')[0];
+  document.getElementById('ht2').value=today;
+  goTab('plan');
+  loadPlan();
 }
 
-// ── Tab navigation ────────────────────────────────────────
-var _tab = 'plan';
-function goTab(t) {
-    _tab = t;
-    document.querySelectorAll('.tab-pane').forEach(function(el){ el.classList.add('hidden'); });
-    var pane = document.getElementById('tab-'+t);
-    if (pane) pane.classList.remove('hidden');
-    ['plan','worklog','history'].forEach(function(n) {
-        var nb = document.getElementById('nav-'+n);
-        if (!nb) return;
-        if (n===t) { nb.style.color='#34d399'; }
-        else       { nb.style.color='#64748b'; }
+// ── Tab ───────────────────────────────────────────────────
+var _tab='plan';
+function goTab(t){
+  _tab=t;
+  document.querySelectorAll('.tab-pane').forEach(function(el){el.style.display='none';});
+  document.getElementById('tab-'+t).style.display='block';
+  ['plan','worklog','history'].forEach(function(n){
+    document.getElementById('nav-'+n).style.color=n===t?'#34d399':'#64748b';
+  });
+  if(t==='worklog')wlLoad();
+}
+
+// ══════════════════════════════════════════════════════════
+// TODAY'S PLAN
+// ══════════════════════════════════════════════════════════
+var _plans=[],_confs={};
+
+async function loadPlan(){
+  var today=new Date().toISOString().split('T')[0];
+  document.getElementById('plan-cards').innerHTML='<div style="text-align:center;padding:60px 0;color:#334155;"><i class="fas fa-spinner fa-spin" style="font-size:28px;display:block;margin-bottom:12px;color:#475569;"></i><p style="font-weight:700;font-size:13px;color:#475569;">กำลังโหลดแผน...</p></div>';
+  document.getElementById('st-total').textContent='–';
+  document.getElementById('st-done').textContent='0';
+  document.getElementById('st-fail').textContent='0';
+
+  if(!_sess.driver_id){renderPlanCards([]);return;}
+  showL();
+  var {data:plans,error}=await _sb.from('logistic_plans')
+    .select('plan_id,plan_date,status,truck_plate,child_plate,driver_id,shops,is_mother,is_child,job_type')
+    .eq('plan_date',today).neq('status','success').eq('driver_id',_sess.driver_id);
+  hideL();
+  if(error){showToast('❌ โหลดแผนไม่สำเร็จ',true);renderPlanCards([]);return;}
+  _plans=plans||[];
+
+  // Update header truck from plans
+  if(_plans.length){
+    var trucks=Array.from(new Set(_plans.flatMap(function(p){return[p.truck_plate,p.child_plate].filter(Boolean);}))).join(', ');
+    document.getElementById('ht').textContent=trucks?'🚛 '+trucks:'–';
+  } else {
+    document.getElementById('ht').textContent='– ไม่มีแผนวันนี้ –';
+  }
+
+  // Populate worklog plan selector
+  var sel=document.getElementById('wl-plan');
+  sel.innerHTML='<option value="">– ไม่ระบุแผน –</option>'+_plans.map(function(p){
+    return '<option value="'+esc(p.plan_id)+'">'+esc(p.plan_id)+(p.truck_plate?' ('+esc(p.truck_plate)+')':'')+'</option>';
+  }).join('');
+
+  if(!_plans.length){renderPlanCards([]);return;}
+
+  // Load confirmations
+  var ids=_plans.map(function(p){return p.plan_id;});
+  var {data:confs}=await _sb.from('delivery_confirmations').select('*').in('plan_id',ids);
+  _confs={};
+  (confs||[]).forEach(function(c){_confs[c.plan_id+'|'+c.shop_seq]=c;});
+  renderPlanCards(_plans);
+}
+
+function renderPlanCards(plans){
+  var wrap=document.getElementById('plan-cards');
+  if(!plans.length){
+    wrap.innerHTML='<div style="text-align:center;padding:60px 0;color:#334155;"><i class="fas fa-clipboard-check" style="font-size:48px;display:block;margin-bottom:12px;opacity:.25;"></i><p style="font-weight:900;color:#475569;font-size:15px;">ไม่มีแผนวันนี้</p><p style="font-size:13px;margin-top:6px;color:#334155;">ระบบไม่พบแผนสำหรับ '+esc(_sess.driver_name||_sess.username)+'</p></div>';
+    document.getElementById('st-total').textContent=0;
+    return;
+  }
+
+  // Count totals across all plans
+  var allShopCount=0,allDone=0,allFail=0;
+  plans.forEach(function(p){
+    (p.shops||[]).forEach(function(shop,si){
+      allShopCount++;
+      var c=_confs[p.plan_id+'|'+si];
+      if(c&&c.status==='delivered')allDone++;
+      if(c&&c.status==='failed')allFail++;
     });
-    if (t==='worklog') wlLoad();
-}
+  });
+  document.getElementById('st-total').textContent=allShopCount;
+  document.getElementById('st-done').textContent=allDone;
+  document.getElementById('st-fail').textContent=allFail;
 
-// ── TODAY PLAN ────────────────────────────────────────────
-var _plans = [], _confs = {};
-
-async function loadPlan() {
-    var today = new Date().toISOString().split('T')[0];
-    document.getElementById('plan-list').innerHTML = '<div class="text-center py-12 text-slate-500"><i class="fas fa-spinner fa-spin text-2xl mb-2 block"></i><p class="text-sm font-bold">กำลังโหลด...</p></div>';
-    document.getElementById('stat-total').textContent='–';
-    document.getElementById('stat-done').textContent='0';
-    document.getElementById('stat-fail').textContent='0';
-
-    if (!_sess.driver_id) { renderPlan([]); return; }
-
-    showLoad();
-    var {data:plans, error} = await _sb.from('logistic_plans')
-        .select('plan_id,plan_date,status,truck_plate,child_plate,driver_id,shops,is_mother,is_child')
-        .eq('plan_date', today)
-        .neq('status','success')
-        .eq('driver_id', _sess.driver_id);
-    hideLoad();
-
-    if (error) { showToast('❌ โหลดแผนไม่สำเร็จ',true); renderPlan([]); return; }
-    _plans = plans||[];
-
-    // Show truck from plan in header
-    if (_plans.length) {
-        var trucks = Array.from(new Set(_plans.map(function(p){ return [p.truck_plate,p.child_plate].filter(Boolean); }).flat())).join(', ');
-        document.getElementById('hdr-truck').textContent = trucks ? '🚛 '+trucks : '– ไม่ระบุรถ –';
-    } else {
-        document.getElementById('hdr-truck').textContent = '– ไม่มีแผนวันนี้ –';
-    }
-
-    // Populate worklog plan selector
-    var sel=document.getElementById('wl-plan');
-    if(sel) { sel.innerHTML='<option value="">– ไม่ระบุแผน –</option>'+_plans.map(function(p){return '<option value="'+esc(p.plan_id)+'">'+esc(p.plan_id)+(p.truck_plate?' ('+esc(p.truck_plate)+')':'')+'</option>';}).join(''); }
-
-    if (!_plans.length) { renderPlan([]); return; }
-
-    var ids = _plans.map(function(p){return p.plan_id;});
-    var {data:confs} = await _sb.from('delivery_confirmations').select('*').in('plan_id',ids);
-    _confs={};
-    (confs||[]).forEach(function(c){ _confs[c.plan_id+'|'+c.shop_seq]=c; });
-    renderPlan(_plans);
-}
-
-function renderPlan(plans) {
-    var wrap=document.getElementById('plan-list');
-    if (!plans.length) {
-        wrap.innerHTML='<div class="text-center py-14 text-slate-600"><i class="fas fa-clipboard-check text-5xl mb-3 block opacity-20"></i><p class="font-black text-slate-400 text-base">ไม่มีแผนวันนี้</p><p class="text-sm mt-1">ระบบไม่พบแผนจัดส่งสำหรับรถ '+esc(_sess.truck_plate||'ของคุณ')+'</p></div>';
-        document.getElementById('stat-total').textContent=0;
-        return;
-    }
-    var sLabel={pending:'รอส่ง',delivered:'ส่งสำเร็จ',failed:'ส่งไม่ได้'};
-    var sIcon ={pending:'fa-clock',delivered:'fa-check-circle',failed:'fa-times-circle'};
-    var sColor={pending:'#94a3b8',delivered:'#34d399',failed:'#f87171'};
-
-    var allShops=[];
-    plans.forEach(function(p){
-        (p.shops||[]).forEach(function(shop,si){
-            var c=_confs[p.plan_id+'|'+si];
-            allShops.push({
-                planId:p.plan_id, shopSeq:si,
-                shopId:shop.shopId||'', shopName:shop.shopName||shop.shopId||'–',
-                items:shop.items||[], status:c?c.status:'pending',
-                note:c?c.note:'', confId:c?c.id:null
-            });
-        });
+  wrap.innerHTML=plans.map(function(p,pi){
+    var shops=p.shops||[];
+    var total=shops.length;
+    var done=0,fail=0,pending=0;
+    shops.forEach(function(shop,si){
+      var c=_confs[p.plan_id+'|'+si];
+      if(!c||c.status==='pending')pending++;
+      else if(c.status==='delivered')done++;
+      else if(c.status==='failed')fail++;
     });
-
-    var done=allShops.filter(function(s){return s.status==='delivered';}).length;
-    var fail=allShops.filter(function(s){return s.status==='failed';}).length;
-    document.getElementById('stat-total').textContent=allShops.length;
-    document.getElementById('stat-done').textContent=done;
-    document.getElementById('stat-fail').textContent=fail;
-
-    wrap.innerHTML='<div class="space-y-2">'+allShops.map(function(shop,i){
-        var qty=shop.items.reduce(function(s,it){return s+(it.qty||0);},0);
-        var bdr=shop.status==='delivered'?'#059669':shop.status==='failed'?'#dc2626':'#334155';
-        var bg =shop.status==='delivered'?'#064e3b':shop.status==='failed'?'#450a0a':'#1e293b';
-        var itemRows=shop.items.slice(0,3).map(function(it){
-            return '<div class="flex justify-between text-[10px] text-slate-400"><span class="truncate max-w-[170px]">'+esc(it.productName||it.sku||'')+'</span><span class="font-black text-slate-300 ml-1 shrink-0">'+Number(it.qty||0).toLocaleString()+' ชิ้น</span></div>';
-        }).join('');
-        return '<div class="rounded-2xl border-2 p-4 cursor-pointer active:scale-[0.97] transition-all slide-up" style="background:'+bg+';border-color:'+bdr+';" onclick=\'openModal('+JSON.stringify(shop)+')\'>'
-            +'<div class="flex items-start justify-between gap-2">'
-            +'<div class="flex items-center gap-3 min-w-0">'
-            +'<div class="w-8 h-8 rounded-full flex items-center justify-center font-black text-sm shrink-0" style="background:#334155;color:#94a3b8;">'+(i+1)+'</div>'
-            +'<div class="min-w-0"><div class="font-black text-white text-sm truncate">'+esc(shop.shopName)+'</div>'
-            +'<div class="text-[10px] text-slate-500 font-semibold mt-0.5">'+esc(shop.shopId)+' &bull; '+shop.items.length+' รายการ &bull; '+qty.toLocaleString()+' ชิ้น</div></div>'
-            +'</div>'
-            +'<div class="flex flex-col items-end gap-0.5 shrink-0">'
-            +'<span class="text-xs font-black flex items-center gap-1" style="color:'+sColor[shop.status]+'">'
-            +'<i class="fas '+sIcon[shop.status]+' text-sm"></i>'+sLabel[shop.status]+'</span>'
-            +(shop.note?'<span class="text-[10px] text-amber-400 max-w-[100px] text-right truncate">'+esc(shop.note)+'</span>':'')
-            +'</div></div>'
-            +(shop.items.length?'<div class="mt-2.5 pt-2 border-t space-y-1" style="border-color:rgba(255,255,255,0.08);">'+itemRows+(shop.items.length>3?'<div class="text-[10px] text-slate-600">+'+( shop.items.length-3)+' รายการ...</div>':'')+'</div>':'')
-            +'</div>';
-    }).join('')+'</div>';
+    var pct=total>0?Math.round(done/total*100):0;
+    var isComplete=done+fail===total&&total>0;
+    var statusColor=isComplete?(fail===0?'#059669':'#d97706'):'#3b82f6';
+    var statusLabel=isComplete?(fail===0?'เสร็จสิ้น':'มีปัญหา'):(done>0?'กำลังดำเนินการ':'รอเริ่ม');
+    var statusIcon =isComplete?(fail===0?'fa-check-circle':'fa-exclamation-circle'):(done>0?'fa-truck-moving':'fa-clock');
+    var truck=p.truck_plate||(p.child_plate?'แม่+ลูก':'–');
+    return '<div class="fade-up" style="background:#1e293b;border-radius:20px;padding:20px;margin-bottom:12px;border:2px solid '+(isComplete?statusColor:'#334155')+';">'
+      // Trip header row
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:14px;">'
+      +'<div>'
+      +'<div style="font-weight:900;color:#fff;font-size:16px;">เที่ยวที่ '+(pi+1)+'</div>'
+      +'<div style="font-size:11px;color:#64748b;font-weight:600;margin-top:3px;">'+esc(p.plan_id)+'</div>'
+      +'</div>'
+      +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">'
+      +'<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:900;color:'+statusColor+';background:rgba(0,0,0,.25);padding:4px 10px;border-radius:20px;"><i class="fas '+statusIcon+'" style="font-size:11px;"></i>'+statusLabel+'</span>'
+      +'<span style="font-size:11px;color:#94a3b8;font-weight:600;">🚛 '+esc(truck)+'</span>'
+      +'</div>'
+      +'</div>'
+      // Stats mini
+      +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">'
+      +'<div style="background:#0f172a;border-radius:10px;padding:8px;text-align:center;"><div style="font-weight:900;color:#fff;font-size:18px;">'+total+'</div><div style="font-size:10px;color:#64748b;font-weight:700;">จุดส่ง</div></div>'
+      +'<div style="background:#0f172a;border-radius:10px;padding:8px;text-align:center;"><div style="font-weight:900;color:#34d399;font-size:18px;">'+done+'</div><div style="font-size:10px;color:#064e3b;font-weight:700;">สำเร็จ</div></div>'
+      +'<div style="background:#0f172a;border-radius:10px;padding:8px;text-align:center;"><div style="font-weight:900;color:'+(fail>0?'#f87171':'#64748b')+';font-size:18px;">'+fail+'</div><div style="font-size:10px;color:#64748b;font-weight:700;">ไม่ได้</div></div>'
+      +'</div>'
+      // Progress bar
+      +'<div style="margin-bottom:16px;">'
+      +'<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:5px;"><span style="color:#94a3b8;font-weight:700;">ความคืบหน้า</span><span style="color:#34d399;font-weight:900;">'+done+' / '+total+'</span></div>'
+      +'<div class="prog-bg"><div class="prog-fill" style="background:'+statusColor+';width:'+pct+'%;"></div></div>'
+      +'</div>'
+      // Action button
+      +'<button onclick="openTrip(\''+esc(p.plan_id)+'\')" style="width:100%;background:'+(isComplete?'#1e3a8a':'#059669')+';border:none;border-radius:12px;padding:13px;color:#fff;font-weight:900;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">'
+      +'<i class="fas '+(isComplete?'fa-eye':'fa-play')+'" style="font-size:13px;"></i>'
+      +(isComplete?'ดูสรุปผลการส่ง':pending===total?'เริ่มบันทึกการส่ง':'บันทึกการส่งต่อ')
+      +'</button>'
+      +'</div>';
+  }).join('');
 }
 
-// ── Status Modal ──────────────────────────────────────────
-var _mShop=null;
-function openModal(shop) {
-    _mShop=shop;
+// ══════════════════════════════════════════════════════════
+// TRIP DETAIL SCREEN
+// ══════════════════════════════════════════════════════════
+var _tripPlan=null;
+
+function openTrip(planId){
+  _tripPlan=_plans.find(function(p){return p.plan_id===planId;})||null;
+  if(!_tripPlan)return;
+  var shops=_tripPlan.shops||[];
+  var done=0,total=shops.length;
+  shops.forEach(function(sh,si){var c=_confs[planId+'|'+si];if(c&&c.status==='delivered')done++;});
+  var pct=total>0?Math.round(done/total*100):0;
+  document.getElementById('trip-title').textContent='เที่ยว: '+planId;
+  document.getElementById('trip-sub').textContent='🚛 '+(_tripPlan.truck_plate||'–')+' &bull; '+total+' จุดส่ง';
+  document.getElementById('trip-prog-txt').textContent=done+' / '+total;
+  document.getElementById('trip-prog-bar').style.width=pct+'%';
+  renderTripShops(planId);
+  var ts=document.getElementById('trip-screen');
+  ts.style.display='flex';
+  ts.classList.add('open');
+}
+
+function closeTrip(){
+  var ts=document.getElementById('trip-screen');
+  ts.classList.remove('open');
+  setTimeout(function(){ts.style.display='none';},280);
+  loadPlan(); // refresh cards after returning
+}
+
+function renderTripShops(planId){
+  var shops=_tripPlan?(_tripPlan.shops||[]):[];
+  var list=document.getElementById('trip-shop-list');
+  if(!shops.length){list.innerHTML='<p style="text-align:center;color:#475569;padding:40px 0;font-weight:700;">ไม่มีข้อมูลร้านค้า</p>';return;}
+
+  var sLabel={pending:'รอส่ง',delivered:'ส่งสำเร็จ',failed:'ส่งไม่ได้'};
+  var sColor ={pending:'#94a3b8',delivered:'#34d399',failed:'#f87171'};
+  var sBg    ={pending:'#1e293b',delivered:'#064e3b',failed:'#450a0a'};
+  var sBdr   ={pending:'#334155',delivered:'#059669',failed:'#dc2626'};
+  var sIcon  ={pending:'fa-clock',delivered:'fa-check-circle',failed:'fa-times-circle'};
+
+  list.innerHTML='<div style="display:flex;flex-direction:column;gap:10px;">'+shops.map(function(shop,si){
+    var c=_confs[planId+'|'+si];
+    var st=c?c.status:'pending';
     var qty=(shop.items||[]).reduce(function(s,it){return s+(it.qty||0);},0);
-    var btns=[
-        {s:'pending',   lbl:'รอส่ง',     icon:'fa-clock',        bg:'#334155',bg2:'#475569'},
-        {s:'delivered', lbl:'ส่งสำเร็จ', icon:'fa-check-circle', bg:'#065f46',bg2:'#047857'},
-        {s:'failed',    lbl:'ส่งไม่ได้', icon:'fa-times-circle', bg:'#7f1d1d',bg2:'#991b1b'},
-    ];
-    document.getElementById('modal-content').innerHTML=
-        '<div class="flex items-center justify-between mb-3">'
-        +'<h3 class="font-black text-white text-base">'+esc(shop.shopName)+'</h3>'
-        +'<button onclick="closeModal()" class="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-white" style="background:#334155;"><i class="fas fa-times text-sm"></i></button>'
-        +'</div>'
-        +'<div class="text-xs text-slate-400 mb-3">'+esc(shop.shopId)+' &bull; '+shop.items.length+' รายการ &bull; รวม '+qty.toLocaleString()+' ชิ้น</div>'
-        +(shop.items.length?
-            '<div class="rounded-xl p-3 mb-4 space-y-1.5 overflow-y-auto" style="background:#0f172a;max-height:120px;">'
-            +(shop.items||[]).map(function(it){
-                return '<div class="flex justify-between text-xs"><span class="text-slate-300 truncate max-w-[180px]">'+esc(it.productName||it.sku||'')+'</span>'
-                +'<span class="font-black text-white ml-2 shrink-0">'+Number(it.qty||0).toLocaleString()+' ชิ้น</span></div>';
-            }).join('')+'</div>':'')
-        +'<p class="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-wider">อัพเดทสถานะ</p>'
-        +'<div class="grid grid-cols-3 gap-2 mb-4" id="status-btns">'
-        +btns.map(function(b){
-            var active=shop.status===b.s;
-            return '<button onclick="pickStatus(\''+b.s+'\')" id="sbtn-'+b.s+'" class="py-3.5 rounded-xl font-black text-xs text-white flex flex-col items-center gap-1.5 active:scale-95 transition-all'+(active?' ring-2 ring-white ring-offset-1 ring-offset-slate-800':'')+'" style="background:'+(active?b.bg2:b.bg)+';">'
-            +'<i class="fas '+b.icon+' text-lg"></i>'+b.lbl+'</button>';
-        }).join('')+'</div>'
-        +'<p class="text-[10px] font-black text-slate-400 uppercase mb-1.5 tracking-wider">หมายเหตุ</p>'
-        +'<textarea id="modal-note" rows="2" class="w-full rounded-xl px-3 py-2.5 font-semibold text-white text-sm outline-none resize-none mb-4" style="background:#0f172a;border:1px solid #334155;" placeholder="(ถ้ามี)">'+esc(shop.note||'')+'</textarea>'
-        +'<button onclick="saveStatus()" class="w-full py-3.5 rounded-xl font-black text-white text-sm flex items-center justify-center gap-2 active:scale-95 transition-all" style="background:#059669;"><i class="fas fa-check"></i> บันทึกสถานะ</button>';
-
-    document.getElementById('modal-overlay').classList.add('open');
-}
-
-function pickStatus(s) {
-    if (_mShop) _mShop.status=s;
-    var colors={pending:'#334155',delivered:'#065f46',failed:'#7f1d1d'};
-    var colors2={pending:'#475569',delivered:'#047857',failed:'#991b1b'};
-    ['pending','delivered','failed'].forEach(function(x){
-        var b=document.getElementById('sbtn-'+x);
-        if(!b) return;
-        b.style.background=x===s?colors2[x]:colors[x];
-        if(x===s){ b.classList.add('ring-2','ring-white','ring-offset-1'); b.style.setProperty('--tw-ring-offset-color','#1e293b'); }
-        else { b.classList.remove('ring-2','ring-white','ring-offset-1'); }
-    });
-}
-
-function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); _mShop=null; }
-document.getElementById('modal-overlay').addEventListener('click',function(e){ if(e.target===this) closeModal(); });
-
-async function saveStatus() {
-    if (!_mShop) return;
-    var note=document.getElementById('modal-note').value||'';
-    var status=_mShop.status||'pending';
-    var now=new Date().toISOString();
-    var payload={plan_id:_mShop.planId, shop_id:_mShop.shopId, shop_name:_mShop.shopName,
-        shop_seq:_mShop.shopSeq, status:status, note:note, driver_username:_sess.username, confirmed_at:now};
-    showLoad();
-    var res;
-    if (_mShop.confId) {
-        res=await _sb.from('delivery_confirmations').update({status:status,note:note,confirmed_at:now}).eq('id',_mShop.confId);
-    } else {
-        res=await _sb.from('delivery_confirmations').insert(payload);
-    }
-    hideLoad();
-    if (res.error) { showToast('❌ '+res.error.message,true); return; }
-    closeModal();
-    showToast('✅ อัพเดทสถานะเรียบร้อย');
-    loadPlan();
-}
-
-// ── Work Log ──────────────────────────────────────────────
-var _wlId=null;
-
-async function wlLoad() {
-    var today=new Date().toISOString().split('T')[0];
-    var {data}=await _sb.from('driver_work_logs').select('*')
-        .eq('driver_username',_sess.username).eq('work_date',today)
-        .order('created_at',{ascending:false}).limit(1).maybeSingle();
-    if (data) {
-        _wlId=data.id;
-        document.getElementById('wl-odom-s').value=data.odometer_start||'';
-        document.getElementById('wl-odom-e').value=data.odometer_end||'';
-        document.getElementById('wl-dep').value=data.time_depart||'';
-        document.getElementById('wl-arr').value=data.time_arrive||'';
-        document.getElementById('wl-note').value=data.note||'';
-        if(data.plan_id&&document.getElementById('wl-plan')) document.getElementById('wl-plan').value=data.plan_id;
-        document.getElementById('wl-saved-badge').textContent='(โหลดจากระบบ)';
-        wlCalc();
-    } else {
-        _wlId=null;
-        document.getElementById('wl-saved-badge').textContent='';
-    }
-}
-
-function wlCalc() {
-    var s=parseFloat(document.getElementById('wl-odom-s').value);
-    var e=parseFloat(document.getElementById('wl-odom-e').value);
-    var el=document.getElementById('wl-km');
-    if (!isNaN(s)&&!isNaN(e)&&e>s) { el.textContent=(e-s).toLocaleString('th-TH',{maximumFractionDigits:1})+' กม.'; el.style.color='#34d399'; }
-    else { el.textContent='– กม.'; el.style.color='#94a3b8'; }
-}
-
-async function wlSave() {
-    var today=new Date().toISOString().split('T')[0];
-    var planId=document.getElementById('wl-plan').value||'';
-    var planRow=_plans.find(function(p){return p.plan_id===planId;})||{};
-    var truckPlate=planRow.truck_plate||'';
-    var payload={driver_username:_sess.username, plan_id:planId, truck_plate:truckPlate,
-        work_date:today, odometer_start:parseFloat(document.getElementById('wl-odom-s').value)||0,
-        odometer_end:parseFloat(document.getElementById('wl-odom-e').value)||0,
-        time_depart:document.getElementById('wl-dep').value||'',
-        time_arrive:document.getElementById('wl-arr').value||'',
-        note:document.getElementById('wl-note').value||'', updated_at:new Date().toISOString()};
-    showLoad();
-    var res;
-    if (_wlId) { res=await _sb.from('driver_work_logs').update(payload).eq('id',_wlId); }
-    else { res=await _sb.from('driver_work_logs').insert(payload); if(!res.error&&res.data&&res.data[0]) _wlId=res.data[0].id; }
-    hideLoad();
-    if (res.error) { showToast('❌ '+res.error.message,true); return; }
-    showToast('✅ บันทึกข้อมูลเรียบร้อย');
-    document.getElementById('wl-saved-badge').textContent='(บันทึกแล้ว)';
-}
-
-// ── History ───────────────────────────────────────────────
-async function histLoad() {
-    var from=document.getElementById('hist-from').value;
-    var to  =document.getElementById('hist-to').value;
-    if (!from||!to) { showToast('⚠️ กรุณาเลือกช่วงวันที่',true); return; }
-    showLoad();
-    var {data:logs}=await _sb.from('driver_work_logs').select('*')
-        .eq('driver_username',_sess.username).gte('work_date',from).lte('work_date',to)
-        .order('work_date',{ascending:false});
-    var {data:confs}=await _sb.from('delivery_confirmations').select('plan_id,shop_name,shop_id,status,confirmed_at')
-        .eq('driver_username',_sess.username)
-        .gte('confirmed_at',from+'T00:00:00Z').lte('confirmed_at',to+'T23:59:59Z')
-        .order('confirmed_at',{ascending:false});
-    hideLoad();
-    var wrap=document.getElementById('hist-list');
-    if ((!logs||!logs.length)&&(!confs||!confs.length)) {
-        wrap.innerHTML='<div class="text-center py-12 text-slate-600"><i class="fas fa-inbox text-4xl mb-3 block opacity-20"></i><p class="font-bold text-sm">ไม่มีข้อมูลในช่วงนี้</p></div>'; return;
-    }
-    var mos=['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-    function fmtD(d) { if(!d) return '–'; var p=String(d).substring(0,10).split('-'); return p[2]+' '+mos[+p[1]]+' '+(+p[0]+543); }
-    var confByDate={};
-    (confs||[]).forEach(function(c){ var d=(c.confirmed_at||'').substring(0,10); if(!confByDate[d]) confByDate[d]=[]; confByDate[d].push(c); });
-    var logByDate={};
-    (logs||[]).forEach(function(l){ logByDate[l.work_date]=l; });
-    var allDates=Array.from(new Set([...(logs||[]).map(function(l){return l.work_date;}), ...Object.keys(confByDate)])).sort().reverse();
-    wrap.innerHTML=allDates.map(function(date){
-        var log=logByDate[date];
-        var dc =confByDate[date]||[];
-        var km =log&&log.odometer_end>log.odometer_start?(log.odometer_end-log.odometer_start):0;
-        var done=dc.filter(function(c){return c.status==='delivered';}).length;
-        var fail=dc.filter(function(c){return c.status==='failed';}).length;
-        var shopRows=dc.slice(0,5).map(function(c){
-            var ic=c.status==='delivered'?'fa-check-circle':'c.status==="failed"'?'fa-times-circle':'fa-clock';
-            var col=c.status==='delivered'?'#34d399':c.status==='failed'?'#f87171':'#94a3b8';
-            return '<div class="flex justify-between text-xs py-1" style="border-bottom:1px solid rgba(255,255,255,0.04);">'
-                +'<span class="text-slate-400 truncate max-w-[200px]">'+esc(c.shop_name||c.shop_id||'')+'</span>'
-                +'<span class="font-bold shrink-0" style="color:'+col+';">'+(c.status==='delivered'?'✓ ส่งแล้ว':c.status==='failed'?'✗ ไม่ได้':'รอ')+'</span>'
-                +'</div>';
-        }).join('');
-        return '<div class="rounded-2xl p-4 space-y-3 slide-up" style="background:#1e293b;">'
-            +'<div class="flex items-center justify-between">'
-            +'<span class="font-black text-white text-sm">'+fmtD(date)+'</span>'
-            +'<div class="flex gap-2">'
-            +(done?'<span class="text-[10px] font-bold px-2 py-0.5 rounded-full" style="background:#064e3b;color:#34d399;">✓ '+done+' ส่งแล้ว</span>':'')
-            +(fail?'<span class="text-[10px] font-bold px-2 py-0.5 rounded-full" style="background:#450a0a;color:#f87171;">✗ '+fail+' ไม่ได้</span>':'')
-            +'</div></div>'
-            +(log?'<div class="grid grid-cols-3 gap-2 text-center">'
-                +'<div class="rounded-xl py-2" style="background:#0f172a;"><div class="font-black text-emerald-400 text-sm">'+(km>0?km.toLocaleString():'–')+'</div><div class="text-[10px] text-slate-500">กม.</div></div>'
-                +'<div class="rounded-xl py-2" style="background:#0f172a;"><div class="font-black text-white text-sm">'+(log.time_depart||'–')+'</div><div class="text-[10px] text-slate-500">ออกงาน</div></div>'
-                +'<div class="rounded-xl py-2" style="background:#0f172a;"><div class="font-black text-white text-sm">'+(log.time_arrive||'–')+'</div><div class="text-[10px] text-slate-500">เสร็จงาน</div></div>'
-                +'</div>'+(log.note?'<div class="text-xs text-slate-400 rounded-xl px-3 py-2" style="background:#0f172a;">'+esc(log.note)+'</div>':''):'')
-            +(dc.length?'<div class="space-y-0">'+shopRows+(dc.length>5?'<div class="text-[10px] text-slate-600 pt-1">+'+( dc.length-5)+' จุดเพิ่มเติม...</div>':'')+'</div>':'')
+    var shopData={planId:planId,shopSeq:si,shopId:shop.shopId||'',shopName:shop.shopName||shop.shopId||'–',items:shop.items||[],status:st,note:c?c.note:'',confId:c?c.id:null};
+    return '<div class="fade-up" style="background:'+sBg[st]+';border:2px solid '+sBdr[st]+';border-radius:16px;padding:16px;cursor:pointer;" onclick=\'openModal('+JSON.stringify(shopData)+')\'>'
+      +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">'
+      +'<div style="display:flex;align-items:center;gap:10px;min-width:0;">'
+      +'<div style="width:32px;height:32px;border-radius:50%;background:#0f172a;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#94a3b8;flex-shrink:0;">'+(si+1)+'</div>'
+      +'<div style="min-width:0;">'
+      +'<div style="font-weight:900;color:#fff;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(shop.shopName||shop.shopId||'–')+'</div>'
+      +'<div style="font-size:11px;color:#64748b;font-weight:600;margin-top:2px;">'+esc(shop.shopId||'')+(shop.items.length?' &bull; '+shop.items.length+' รายการ &bull; '+qty.toLocaleString()+' ชิ้น':'')+'</div>'
+      +'</div></div>'
+      +'<div style="flex-shrink:0;text-align:right;">'
+      +'<span style="font-size:12px;font-weight:900;color:'+sColor[st]+';display:flex;align-items:center;gap:4px;"><i class="fas '+sIcon[st]+'" style="font-size:13px;"></i>'+sLabel[st]+'</span>'
+      +(c&&c.note?'<div style="font-size:10px;color:#fbbf24;margin-top:3px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(c.note)+'</div>':'')
+      +'</div></div>'
+      // Items preview
+      +(shop.items&&shop.items.length?
+        '<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.06);">'
+        +(shop.items||[]).slice(0,3).map(function(it){
+          return '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px;">'
+            +'<span style="color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;">'+esc(it.productName||it.sku||'')+'</span>'
+            +'<span style="font-weight:900;color:#e2e8f0;margin-left:8px;flex-shrink:0;">'+Number(it.qty||0).toLocaleString()+' ชิ้น</span>'
             +'</div>';
-    }).join('');
+        }).join('')
+        +(shop.items.length>3?'<div style="font-size:10px;color:#475569;">+'+( shop.items.length-3)+' รายการ...</div>':'')
+        +'</div>':'')
+      +'</div>';
+  }).join('')+'</div>';
 }
 
-// ── Utilities ─────────────────────────────────────────────
-function showLoad() { document.getElementById('loading-overlay').classList.add('show'); }
-function hideLoad() { document.getElementById('loading-overlay').classList.remove('show'); }
+// Update trip progress bar when a status changes
+function updateTripProgress(planId){
+  var shops=_tripPlan?(_tripPlan.shops||[]):[];
+  var total=shops.length,done=0;
+  shops.forEach(function(sh,si){var c=_confs[planId+'|'+si];if(c&&c.status==='delivered')done++;});
+  var pct=total>0?Math.round(done/total*100):0;
+  document.getElementById('trip-prog-txt').textContent=done+' / '+total;
+  document.getElementById('trip-prog-bar').style.width=pct+'%';
+}
 
+// ══════════════════════════════════════════════════════════
+// STATUS MODAL
+// ══════════════════════════════════════════════════════════
+var _mShop=null;
+function openModal(shop){
+  _mShop=shop;
+  var qty=(shop.items||[]).reduce(function(s,it){return s+(it.qty||0);},0);
+  var btns=[
+    {s:'pending',  lbl:'รอส่ง',    icon:'fa-clock',        bg:'#334155',bg2:'#475569'},
+    {s:'delivered',lbl:'ส่งสำเร็จ',icon:'fa-check-circle',bg:'#065f46',bg2:'#047857'},
+    {s:'failed',   lbl:'ส่งไม่ได้',icon:'fa-times-circle',bg:'#7f1d1d',bg2:'#991b1b'},
+  ];
+  document.getElementById('mod-c').innerHTML=
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
+    +'<h3 style="font-weight:900;color:#fff;font-size:15px;">'+esc(shop.shopName)+'</h3>'
+    +'<button onclick="closeModal()" style="width:32px;height:32px;border-radius:50%;background:#334155;border:none;color:#94a3b8;cursor:pointer;display:flex;align-items:center;justify-content:center;"><i class="fas fa-times" style="font-size:13px;"></i></button>'
+    +'</div>'
+    +'<div style="font-size:12px;color:#64748b;margin-bottom:16px;">'+esc(shop.shopId)+' &bull; '+shop.items.length+' รายการ &bull; รวม '+qty.toLocaleString()+' ชิ้น</div>'
+    // Items
+    +(shop.items.length?'<div style="background:#0f172a;border-radius:12px;padding:12px;margin-bottom:16px;max-height:130px;overflow-y:auto;">'
+      +(shop.items||[]).map(function(it){
+        return '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;">'
+          +'<span style="color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;">'+esc(it.productName||it.sku||'')+'</span>'
+          +'<span style="font-weight:900;color:#fff;margin-left:8px;flex-shrink:0;">'+Number(it.qty||0).toLocaleString()+' ชิ้น</span></div>';
+      }).join('')+'</div>':'')
+    // Status buttons
+    +'<p style="font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">สถานะการส่ง</p>'
+    +'<div id="sbtns" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;">'
+    +btns.map(function(b){
+      var active=shop.status===b.s;
+      return '<button id="sb-'+b.s+'" onclick="pickStatus(\''+b.s+'\')" '
+        +'style="padding:14px 4px;border-radius:12px;background:'+(active?b.bg2:b.bg)+';border:'+(active?'2px solid #fff':'2px solid transparent')+';color:#fff;font-weight:900;font-size:11px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;">'
+        +'<i class="fas '+b.icon+'" style="font-size:20px;"></i>'+b.lbl+'</button>';
+    }).join('')+'</div>'
+    +'<p style="font-size:10px;font-weight:900;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">หมายเหตุ</p>'
+    +'<textarea id="mod-note" rows="2" placeholder="(ถ้ามี)" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:12px;padding:10px 12px;color:#fff;font-size:13px;outline:none;resize:none;margin-bottom:16px;">'+esc(shop.note||'')+'</textarea>'
+    +'<button onclick="saveStatus()" style="width:100%;background:#059669;border:none;border-radius:12px;padding:14px;color:#fff;font-weight:900;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;"><i class="fas fa-check"></i> บันทึกสถานะ</button>';
+  document.getElementById('mod-ov').classList.add('open');
+}
+
+function pickStatus(s){
+  if(_mShop)_mShop.status=s;
+  var bgs={pending:'#334155',delivered:'#065f46',failed:'#7f1d1d'};
+  var bg2s={pending:'#475569',delivered:'#047857',failed:'#991b1b'};
+  ['pending','delivered','failed'].forEach(function(x){
+    var b=document.getElementById('sb-'+x);if(!b)return;
+    if(x===s){b.style.background=bg2s[x];b.style.borderColor='#fff';}
+    else{b.style.background=bgs[x];b.style.borderColor='transparent';}
+  });
+}
+
+function closeModal(){document.getElementById('mod-ov').classList.remove('open');_mShop=null;}
+document.getElementById('mod-ov').addEventListener('click',function(e){if(e.target===this)closeModal();});
+
+async function saveStatus(){
+  if(!_mShop)return;
+  var note=document.getElementById('mod-note').value||'';
+  var status=_mShop.status||'pending';
+  var now=new Date().toISOString();
+  var payload={plan_id:_mShop.planId,shop_id:_mShop.shopId,shop_name:_mShop.shopName,
+    shop_seq:_mShop.shopSeq,status:status,note:note,driver_username:_sess.username,confirmed_at:now};
+  showL();
+  var res;
+  if(_mShop.confId){res=await _sb.from('delivery_confirmations').update({status:status,note:note,confirmed_at:now}).eq('id',_mShop.confId);}
+  else{res=await _sb.from('delivery_confirmations').upsert(payload,{onConflict:'plan_id,shop_seq'});}
+  hideL();
+  if(res.error){showToast('❌ '+res.error.message,true);return;}
+  // Update local cache
+  var key=_mShop.planId+'|'+_mShop.shopSeq;
+  if(!_confs[key]) _confs[key]={id:null,status:status,note:note,confirmed_at:now};
+  else{ _confs[key].status=status; _confs[key].note=note; _confs[key].confirmed_at=now; }
+  closeModal();
+  showToast('✅ อัพเดทสถานะเรียบร้อย');
+  // Re-render shop list & progress bar (in-memory, no network)
+  if(_tripPlan) renderTripShops(_tripPlan.plan_id);
+  updateTripProgress(_tripPlan?_tripPlan.plan_id:'');
+}
+
+// ══════════════════════════════════════════════════════════
+// WORK LOG
+// ══════════════════════════════════════════════════════════
+var _wlId=null;
+async function wlLoad(){
+  var today=new Date().toISOString().split('T')[0];
+  var {data}=await _sb.from('driver_work_logs').select('*')
+    .eq('driver_username',_sess.username).eq('work_date',today).maybeSingle();
+  if(data){
+    _wlId=data.id;
+    document.getElementById('wl-s').value=data.odometer_start||'';
+    document.getElementById('wl-e').value=data.odometer_end||'';
+    document.getElementById('wl-dep').value=data.time_depart||'';
+    document.getElementById('wl-arr').value=data.time_arrive||'';
+    document.getElementById('wl-note').value=data.note||'';
+    if(data.plan_id)document.getElementById('wl-plan').value=data.plan_id;
+    document.getElementById('wl-badge').textContent='(โหลดจากระบบ)';
+    wlCalc();
+  } else {
+    _wlId=null;
+    document.getElementById('wl-badge').textContent='';
+  }
+}
+function wlCalc(){
+  var s=parseFloat(document.getElementById('wl-s').value),e=parseFloat(document.getElementById('wl-e').value);
+  var el=document.getElementById('wl-km');
+  if(!isNaN(s)&&!isNaN(e)&&e>s){el.textContent=(e-s).toLocaleString('th-TH',{maximumFractionDigits:1})+' กม.';el.style.color='#34d399';}
+  else{el.textContent='– กม.';el.style.color='#94a3b8';}
+}
+async function wlSave(){
+  var today=new Date().toISOString().split('T')[0];
+  var planId=document.getElementById('wl-plan').value||'';
+  var planRow=_plans.find(function(p){return p.plan_id===planId;})||{};
+  var payload={driver_username:_sess.username,plan_id:planId,truck_plate:planRow.truck_plate||'',
+    work_date:today,odometer_start:parseFloat(document.getElementById('wl-s').value)||0,
+    odometer_end:parseFloat(document.getElementById('wl-e').value)||0,
+    time_depart:document.getElementById('wl-dep').value||'',
+    time_arrive:document.getElementById('wl-arr').value||'',
+    note:document.getElementById('wl-note').value||'',updated_at:new Date().toISOString()};
+  showL();
+  var res;
+  if(_wlId){res=await _sb.from('driver_work_logs').update(payload).eq('id',_wlId);}
+  else{res=await _sb.from('driver_work_logs').insert(payload);if(!res.error&&res.data&&res.data[0])_wlId=res.data[0].id;}
+  hideL();
+  if(res.error){showToast('❌ '+res.error.message,true);}
+  else{showToast('✅ บันทึกข้อมูลเรียบร้อย');document.getElementById('wl-badge').textContent='(บันทึกแล้ว)';}
+}
+
+// ══════════════════════════════════════════════════════════
+// HISTORY
+// ══════════════════════════════════════════════════════════
+async function histLoad(){
+  var from=document.getElementById('hf').value,to=document.getElementById('ht2').value;
+  if(!from||!to){showToast('⚠️ กรุณาเลือกช่วงวันที่',true);return;}
+  showL();
+  var {data:logs}=await _sb.from('driver_work_logs').select('*')
+    .eq('driver_username',_sess.username).gte('work_date',from).lte('work_date',to).order('work_date',{ascending:false});
+  var {data:confs}=await _sb.from('delivery_confirmations').select('plan_id,shop_name,shop_id,status,confirmed_at')
+    .eq('driver_username',_sess.username).gte('confirmed_at',from+'T00:00:00Z').lte('confirmed_at',to+'T23:59:59Z').order('confirmed_at',{ascending:false});
+  hideL();
+  var wrap=document.getElementById('hist-list');
+  if((!logs||!logs.length)&&(!confs||!confs.length)){
+    wrap.innerHTML='<div style="text-align:center;padding:60px 0;color:#334155;"><i class="fas fa-inbox" style="font-size:40px;display:block;margin-bottom:12px;opacity:.25;"></i><p style="font-weight:700;font-size:13px;">ไม่มีข้อมูลในช่วงนี้</p></div>'; return;
+  }
+  var mos=['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  function fD(d){if(!d)return'–';var p=String(d).substring(0,10).split('-');return p[2]+' '+mos[+p[1]]+' '+(+p[0]+543);}
+  var cbd={};(confs||[]).forEach(function(c){var d=(c.confirmed_at||'').substring(0,10);if(!cbd[d])cbd[d]=[];cbd[d].push(c);});
+  var lbd={};(logs||[]).forEach(function(l){lbd[l.work_date]=l;});
+  var dates=Array.from(new Set([...(logs||[]).map(function(l){return l.work_date;}), ...Object.keys(cbd)])).sort().reverse();
+  wrap.innerHTML=dates.map(function(date){
+    var log=lbd[date],dc=cbd[date]||[];
+    var km=log&&log.odometer_end>log.odometer_start?(log.odometer_end-log.odometer_start):0;
+    var done=dc.filter(function(c){return c.status==='delivered';}).length;
+    var fail=dc.filter(function(c){return c.status==='failed';}).length;
+    return '<div class="fade-up" style="background:#1e293b;border-radius:18px;padding:16px;margin-bottom:10px;">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'
+      +'<span style="font-weight:900;color:#fff;font-size:14px;">'+fD(date)+'</span>'
+      +'<div style="display:flex;gap:6px;">'
+      +(done?'<span style="font-size:10px;font-weight:900;background:#064e3b;color:#34d399;padding:3px 8px;border-radius:20px;">✓ '+done+'</span>':'')
+      +(fail?'<span style="font-size:10px;font-weight:900;background:#450a0a;color:#f87171;padding:3px 8px;border-radius:20px;">✗ '+fail+'</span>':'')
+      +'</div></div>'
+      +(log?'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;">'
+        +'<div style="background:#0f172a;border-radius:10px;padding:8px;text-align:center;"><div style="font-weight:900;color:#34d399;font-size:16px;">'+(km>0?km.toLocaleString():'–')+'</div><div style="font-size:10px;color:#475569;">กม.</div></div>'
+        +'<div style="background:#0f172a;border-radius:10px;padding:8px;text-align:center;"><div style="font-weight:900;color:#fff;font-size:14px;">'+(log.time_depart||'–')+'</div><div style="font-size:10px;color:#475569;">ออกงาน</div></div>'
+        +'<div style="background:#0f172a;border-radius:10px;padding:8px;text-align:center;"><div style="font-weight:900;color:#fff;font-size:14px;">'+(log.time_arrive||'–')+'</div><div style="font-size:10px;color:#475569;">เสร็จงาน</div></div>'
+        +'</div>'+(log.note?'<div style="background:#0f172a;border-radius:10px;padding:10px;font-size:12px;color:#94a3b8;margin-bottom:10px;">'+esc(log.note)+'</div>':''):'')
+      +(dc.length?'<div>'+dc.slice(0,5).map(function(c){
+        var sc=c.status==='delivered'?'#34d399':c.status==='failed'?'#f87171':'#94a3b8';
+        return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);">'
+          +'<span style="color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;">'+esc(c.shop_name||c.shop_id||'')+'</span>'
+          +'<span style="font-weight:900;color:'+sc+';flex-shrink:0;margin-left:8px;">'+(c.status==='delivered'?'✓ ส่งแล้ว':c.status==='failed'?'✗ ไม่ได้':'รอ')+'</span></div>';
+      }).join('')+(dc.length>5?'<div style="font-size:10px;color:#475569;padding-top:4px;">+'+( dc.length-5)+' จุดเพิ่มเติม...</div>':'')+'</div>':'')
+      +'</div>';
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════════════════
+function showL(){document.getElementById('ld').classList.add('on');}
+function hideL(){document.getElementById('ld').classList.remove('on');}
 var _tt=null;
-function showToast(msg,isErr) {
-    var el=document.getElementById('toast'), inn=document.getElementById('toast-inner');
-    inn.textContent=msg;
-    inn.className='px-5 py-3 rounded-2xl font-bold text-sm shadow-2xl '+(isErr?'bg-rose-600 text-white':'bg-emerald-600 text-white');
-    el.classList.remove('hidden'); el.style.opacity='1';
-    if(_tt) clearTimeout(_tt);
-    _tt=setTimeout(function(){ el.style.opacity='0'; setTimeout(function(){el.classList.add('hidden');},300); },2800);
+function showToast(msg,isErr){
+  var el=document.getElementById('toast'),inn=document.getElementById('ti');
+  inn.textContent=msg;
+  inn.style.cssText='display:inline-block;padding:12px 20px;border-radius:20px;font-weight:700;font-size:13px;box-shadow:0 8px 32px rgba(0,0,0,.4);background:'+(isErr?'#dc2626':'#059669')+';color:#fff;';
+  el.classList.remove('hidden');el.style.opacity='1';
+  if(_tt)clearTimeout(_tt);
+  _tt=setTimeout(function(){el.style.opacity='0';setTimeout(function(){el.classList.add('hidden');},300);},2800);
 }
-
-function esc(s) {
-    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 </script>
 </body>
 </html>
