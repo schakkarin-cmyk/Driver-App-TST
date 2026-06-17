@@ -918,9 +918,12 @@ async function doDepartShop(){
   var {data:newLog,error:le}=await _sb.from('trip_logs').update({
     status:nextStatus,current_shop_seq:seq,updated_at:now
   }).eq('plan_id',_tripPlan.plan_id).select().single();
+  if(le){hideL();showToast('❌ '+le.message,true);return;}
+  // reload shop_visits จาก DB เพื่อให้ได้ข้อมูล departed_at ที่ถูกต้อง
+  var {data:freshVisits}=await _sb.from('shop_visits').select('*').eq('plan_id',_tripPlan.plan_id);
+  _shopVisits={};
+  (freshVisits||[]).forEach(function(v){_shopVisits[v.shop_seq]=v;});
   hideL();
-  if(le){showToast('❌ '+le.message,true);return;}
-  _shopVisits[seq]=Object.assign({},_shopVisits[seq]||{},{departed_at:now,lat_depart:gps.lat,lng_depart:gps.lng});
   _tripLog=newLog;_capturedFile=null;_capturedPreviewUrl=null;_selectedShopSeq=null;
   renderTimeline();renderAction();
   showToast(allDone?'✅ ส่งครบ! กลับบริษัทได้เลย':'✅ ออกจากร้าน — เลือกร้านถัดไป');
