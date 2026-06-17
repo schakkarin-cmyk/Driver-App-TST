@@ -833,6 +833,43 @@ async function doFinishTrip(){
   _tripLog=newLog;_tripLogs[_tripPlan.plan_id]=newLog;
   // อัพเดทสถานะแผนใน WMS → success
   await _sb.from('logistic_plans').update({status:'success'}).eq('plan_id',_tripPlan.plan_id);
+  // บันทึก driver_activity_log — 1 แถวต่อร้าน
+  try {
+    var delivDate=newLog.started_at?newLog.started_at.slice(0,10):now.slice(0,10);
+    var totalKm=newLog.mileage_end&&newLog.mileage_start?(newLog.mileage_end-newLog.mileage_start):null;
+    var shops=_tripPlan.shops||[];
+    var dalRows=shops.map(function(sh,idx){
+      var sv=_shopVisits[idx]||{};
+      var tDep=newLog.started_at?newLog.started_at.slice(11,16):'';
+      var tArr=sv.arrived_at?sv.arrived_at.slice(11,16):'';
+      var tDep2=sv.departed_at?sv.departed_at.slice(11,16):'';
+      var travelMin=null,kmhr=null;
+      if(tDep&&tArr){
+        var depM=parseInt(tDep.split(':')[0])*60+parseInt(tDep.split(':')[1]);
+        var arrM=parseInt(tArr.split(':')[0])*60+parseInt(tArr.split(':')[1]);
+        var diff=arrM-depM;
+        if(diff>0){travelMin=diff;if(totalKm)kmhr=Math.round(totalKm/(diff/60)*10)/10;}
+      }
+      return {
+        delivery_date:    delivDate,
+        driver_name:      _sess.driver_name||_sess.username||null,
+        truck_plate:      _tripPlan.truck_plate||null,
+        mileage_start:    newLog.mileage_start||null,
+        mileage_end:      newLog.mileage_end||null,
+        time_depart:      tDep||null,
+        time_arrive:      tDep2||tArr||null,
+        shop_code:        sh.shopId||null,
+        shop_name:        sh.shopName||null,
+        distance_km:      totalKm||null,
+        travel_minutes:   travelMin,
+        km_per_hr:        kmhr,
+        planned_distance: parseFloat(sh.distance)||null,
+        sale:             sh.sale||null,
+        recorded_at:      now
+      };
+    });
+    if(dalRows.length) await _sb.from('driver_activity_log').insert(dalRows);
+  } catch(e){ console.warn('driver_activity_log insert failed',e); }
   renderTimeline();renderAction();
   showToast('🎉 จบงานเรียบร้อย!');
 }
