@@ -867,12 +867,12 @@ async function doArriveAtShop(){
       photoUrl=ud.publicUrl;
     }catch(e){hideL();showToast('❌ อัพโหลดรูปไม่ได้',true);return;}
   }
-  // Insert shop_visit พร้อม photo
-  var {data:visitData,error:ve}=await _sb.from('shop_visits').insert({
+  // Upsert shop_visit — ป้องกัน duplicate เมื่อกดซ้ำ
+  var {data:visitData,error:ve}=await _sb.from('shop_visits').upsert({
     plan_id:_tripPlan.plan_id,shop_seq:seq,shop_name:shop.shopName||shop.shopId||'',
     mileage_arrival:mile,lat_arrival:gps.lat,lng_arrival:gps.lng,acc_arrival:gps.acc,
     arrived_at:now,photo_url:photoUrl
-  }).select().single();
+  },{onConflict:'plan_id,shop_seq'}).select().single();
   var {data:newLog,error:le}=await _sb.from('trip_logs').update({
     status:'at_shop',current_shop_seq:seq,updated_at:now
   }).eq('plan_id',_tripPlan.plan_id).select().single();
