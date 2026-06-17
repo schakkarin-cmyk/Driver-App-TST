@@ -590,7 +590,27 @@ function renderIdle(){
 
 function renderTraveling(){
   var shops=_tripPlan.shops||[];
-  var seq=_selectedShopSeq!==null&&_selectedShopSeq!==undefined?_selectedShopSeq:_tripLog.current_shop_seq;
+
+  // ยังไม่เลือกร้านถัดไป → แสดงรายการให้เลือก (กรณีออกจากร้านก่อนหน้าแล้ว)
+  if(_selectedShopSeq===null||_selectedShopSeq===undefined){
+    var remaining=shops.filter(function(sh,i){return !(_shopVisits[i]&&_shopVisits[i].departed_at);});
+    var shopBtns=shops.map(function(sh,i){
+      var done=_shopVisits[i]&&_shopVisits[i].departed_at;
+      if(done)return ''; // ซ่อนร้านที่ส่งแล้ว
+      return '<button onclick="selectShop('+i+')" style="width:100%;text-align:left;background:#0f172a;border:2px solid #334155;border-radius:12px;padding:14px 16px;color:#fff;font-weight:700;font-size:15px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:12px;" ontouchstart="this.style.borderColor=\'#3b82f6\'" ontouchend="this.style.borderColor=\'#334155\'">'
+        +'<div style="width:32px;height:32px;border-radius:50%;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#64748b;flex-shrink:0;">'+(i+1)+'</div>'
+        +'<div style="flex:1;">'+esc(sh.shopName||sh.shopId||'–')+'</div>'
+        +'<i class="fas fa-chevron-right" style="color:#475569;font-size:12px;"></i>'
+        +'</button>';
+    }).join('');
+    return '<div class="fade-up">'
+      +'<div class="card">'
+      +'<div style="font-size:11px;font-weight:900;color:#93c5fd;margin-bottom:14px;"><i class="fas fa-route" style="margin-right:6px;"></i>เลือกร้านถัดไปที่จะไป ('+remaining.length+' ร้านเหลือ)</div>'
+      +shopBtns
+      +'</div></div>';
+  }
+
+  var seq=_selectedShopSeq;
   var shop=shops[seq]||{};
 
   // header: ชื่อร้านที่กำลังไป + เวลาที่ใช้
@@ -924,7 +944,8 @@ async function doDepartShop(){
   _shopVisits={};
   (freshVisits||[]).forEach(function(v){_shopVisits[v.shop_seq]=v;});
   hideL();
-  _tripLog=newLog;_capturedFile=null;_capturedPreviewUrl=null;_selectedShopSeq=null;
+  _tripLog=Object.assign({},newLog||_tripLog,{status:nextStatus});
+  _capturedFile=null;_capturedPreviewUrl=null;_selectedShopSeq=null;
   renderTimeline();renderAction();
   showToast(allDone?'✅ ส่งครบ! กลับบริษัทได้เลย':'✅ ออกจากร้าน — เลือกร้านถัดไป');
 }
