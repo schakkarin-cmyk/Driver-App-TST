@@ -571,43 +571,49 @@ function renderIdle(){
 
 function renderTraveling(){
   var shops=_tripPlan.shops||[];
-  // ร้านที่ยังไม่ได้ส่ง (ยังไม่มี departed_at)
   var unvisited=shops.filter(function(sh,i){return !(_shopVisits[i]&&_shopVisits[i].departed_at);});
-  var sel=_selectedShopSeq;
-  var selShop=sel!==null&&sel!==undefined?shops[sel]:null;
 
-  // ส่วนเลือกร้าน
+  // ถ้าเลือกร้านแล้ว → แสดงหน้าเดินทางของร้านนั้นโดยเฉพาะ
+  if(_selectedShopSeq!==null&&_selectedShopSeq!==undefined){
+    var sel=_selectedShopSeq;
+    var selShop=shops[sel]||{};
+    return '<div class="fade-up">'
+      +'<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;">'
+      +'<span style="font-size:11px;color:#64748b;"><i class="fas fa-clock" style="margin-right:4px;"></i>เวลาที่ใช้เดินทาง</span>'
+      +'<span id="travel-elapsed" style="font-size:14px;font-weight:900;color:#fbbf24;">–</span></div>'
+      +'<div class="card" style="border:2px solid #1d4ed8;">'
+      +'<div style="font-size:10px;font-weight:900;color:#93c5fd;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;"><i class="fas fa-truck-moving" style="margin-right:5px;"></i>กำลังเดินทางไป</div>'
+      +'<div style="font-size:22px;font-weight:900;color:#fff;margin-bottom:12px;line-height:1.2;">'+esc(selShop.shopName||selShop.shopId||'–')+'</div>'
+      +'<button onclick="selectShop(null)" class="btn-secondary"><i class="fas fa-arrow-left"></i> เลือกร้านใหม่</button>'
+      +'</div>'
+      +'<div class="card">'
+      +'<div style="font-size:10px;font-weight:900;color:#6ee7b7;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">ไมล์เมื่อถึงร้าน (หน้าปัดรถ)</div>'
+      +'<input id="inp-mile-arr" type="number" inputmode="numeric" placeholder="เช่น 125060" class="inp" style="margin-bottom:10px;">'
+      +'<div id="travel-countdown-box" style="display:none;background:#1e3a8a;border-radius:10px;padding:10px;text-align:center;font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:10px;">'
+      +'<i class="fas fa-clock" style="margin-right:5px;"></i>รออีก <span id="travel-countdown">–</span> วินาที ก่อนกดถึงร้านได้</div>'
+      +'<button id="btn-arrive" class="btn-main" style="background:#059669;" onclick="doArriveAtShop()"><i class="fas fa-store"></i> ถึง '+esc(selShop.shopName||selShop.shopId||'ร้าน')+' แล้ว</button>'
+      +'</div></div>';
+  }
+
+  // ยังไม่เลือกร้าน → แสดงรายการร้านที่เหลือ
   var shopBtns=shops.map(function(sh,i){
     var sv=_shopVisits[i];
-    var done=sv&&sv.departed_at;
-    if(done)return ''; // ส่งแล้ว ไม่แสดง
-    var isSelected=sel===i;
-    return '<button onclick="selectShop('+i+')" style="width:100%;text-align:left;background:'+(isSelected?'#1e3a8a':'#0f172a')+';border:2px solid '+(isSelected?'#3b82f6':'#334155')+';border-radius:12px;padding:12px 14px;color:#fff;font-weight:700;font-size:14px;cursor:pointer;margin-bottom:8px;display:flex;align-items:center;gap:10px;">'
-      +'<div style="width:28px;height:28px;border-radius:50%;background:'+(isSelected?'#3b82f6':'#1e293b')+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:'+(isSelected?'#fff':'#64748b')+';flex-shrink:0;">'+(i+1)+'</div>'
-      +'<div>'+esc(sh.shopName||sh.shopId||'–')+(sv&&sv.arrived_at?'<span style="font-size:10px;color:#fbbf24;margin-left:6px;">📦 อยู่ที่ร้านนี้</span>':'')+'</div>'
+    if(sv&&sv.departed_at)return ''; // ส่งแล้ว ไม่แสดง
+    return '<button onclick="selectShop('+i+')" style="width:100%;text-align:left;background:#0f172a;border:2px solid #334155;border-radius:12px;padding:14px 16px;color:#fff;font-weight:700;font-size:15px;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;gap:12px;transition:background .15s;" ontouchstart="this.style.background=\'#1e3a8a\'" ontouchend="this.style.background=\'#0f172a\'">'
+      +'<div style="width:32px;height:32px;border-radius:50%;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#64748b;flex-shrink:0;">'+(i+1)+'</div>'
+      +'<div style="flex:1;">'+esc(sh.shopName||sh.shopId||'–')+'</div>'
+      +'<i class="fas fa-chevron-right" style="color:#475569;font-size:12px;"></i>'
       +'</button>';
   }).join('');
 
-  var arriveSection=selShop?('<div class="card" style="margin-top:0;">'
-    +'<div style="font-size:10px;font-weight:900;color:#6ee7b7;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">ไมล์เมื่อถึงร้าน (หน้าปัดรถ)</div>'
-    +'<input id="inp-mile-arr" type="number" inputmode="numeric" placeholder="เช่น 125060" class="inp" style="margin-bottom:10px;">'
-    +'<div id="travel-countdown-box" style="display:none;background:#1e3a8a;border-radius:10px;padding:10px;text-align:center;font-size:12px;font-weight:700;color:#93c5fd;margin-bottom:10px;">'
-    +'<i class="fas fa-clock" style="margin-right:5px;"></i>รออีก <span id="travel-countdown">–</span> วินาที ก่อนกดถึงร้านได้</div>'
-    +'<button id="btn-arrive" class="btn-main" style="background:#059669;" onclick="doArriveAtShop()"><i class="fas fa-store"></i> ถึง '+esc(selShop.shopName||selShop.shopId||'ร้าน')+' แล้ว</button>'
-    +'</div>'):'';
-
-  var elapsedCard='<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;">'
-    +'<span style="font-size:11px;color:#64748b;"><i class="fas fa-clock" style="margin-right:4px;"></i>เวลาที่ใช้เดินทาง</span>'
-    +'<span id="travel-elapsed" style="font-size:14px;font-weight:900;color:#fbbf24;">–</span></div>';
-
   return '<div class="fade-up">'
-    +elapsedCard
+    +'<div class="card" style="padding:10px 14px;display:flex;justify-content:space-between;align-items:center;">'
+    +'<span style="font-size:11px;color:#64748b;"><i class="fas fa-clock" style="margin-right:4px;"></i>เวลาที่ใช้เดินทาง</span>'
+    +'<span id="travel-elapsed" style="font-size:14px;font-weight:900;color:#fbbf24;">–</span></div>'
     +'<div class="card">'
-    +'<div style="font-size:10px;font-weight:900;color:#93c5fd;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;"><i class="fas fa-map-marker-alt" style="margin-right:5px;"></i>เลือกร้านที่จะไปถึง ('+unvisited.length+' ร้านคงเหลือ)</div>'
+    +'<div style="font-size:11px;font-weight:900;color:#93c5fd;margin-bottom:14px;"><i class="fas fa-map-marker-alt" style="margin-right:6px;"></i>เลือกร้านที่ถึงแล้ว ('+unvisited.length+' ร้านคงเหลือ)</div>'
     +shopBtns
-    +'</div>'
-    +arriveSection
-    +'</div>';
+    +'</div></div>';
 }
 
 function selectShop(seq){
