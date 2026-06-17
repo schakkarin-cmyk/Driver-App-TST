@@ -201,6 +201,9 @@ const MIN_TRAVEL_MINS=10;
 const PHOTO_BUCKET='delivery-photos';
 // ระยะขั้นต่ำที่ต้องเคลื่อนที่จาก checkpoint ก่อนหน้า (เมตร) — ป้องกันกดถึงร้านขณะยังไม่ออกจากจุดเดิม
 const MIN_MOVE_METERS=300;
+// รหัสทดสอบ — bypass GPS, เวลา, รูป, ไมล์ทุกการตรวจสอบ
+const TEST_USERNAMES=['test','ทดสอบ','demo'];
+var TEST_MODE=false;
 
 // คำนวนระยะทางระหว่าง 2 พิกัด (Haversine) → เมตร
 function haversineM(lat1,lng1,lat2,lng2){
@@ -267,6 +270,7 @@ function getGPS(){
 }
 
 async function requireGPS(){
+  if(TEST_MODE)return{lat:13.7563,lng:100.5018,acc:5}; // mock GPS กรุงเทพฯ
   try{return await getGPS();}
   catch(code){
     var msg=code===1?'❌ กรุณาอนุญาตให้ใช้ GPS ก่อน':
@@ -285,7 +289,10 @@ function sC(){localStorage.removeItem('tst_drv');}
 document.addEventListener('DOMContentLoaded',function(){
   if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(function(){});
   _sess=sL();
-  if(_sess&&_sess.username)bootMain();
+  if(_sess&&_sess.username){
+    TEST_MODE=TEST_USERNAMES.indexOf(_sess.username.toLowerCase())!==-1;
+    bootMain();
+  }
   else{document.getElementById('sc-login').classList.add('active');hideL();}
   document.getElementById('iu').addEventListener('keydown',function(e){if(e.key==='Enter')document.getElementById('ip').focus();});
   document.getElementById('ip').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
@@ -320,6 +327,7 @@ async function doLogin(){
   if(error||!data){err.textContent='ไม่พบผู้ใช้งาน หรือบัญชีถูกระงับ';err.style.display='block';return;}
   if(data.password!==pwd){err.textContent='รหัสผ่านไม่ถูกต้อง';err.style.display='block';return;}
   _sess={username:data.username,driver_name:data.driver_name,driver_id:data.driver_id};
+  TEST_MODE=TEST_USERNAMES.indexOf(data.username.toLowerCase())!==-1;
   sS(_sess);bootMain();
 }
 
@@ -613,10 +621,11 @@ function renderAtShop(){
     :'<button class="btn-main" style="background:#d97706;margin-bottom:10px;" onclick="openCamera()"><i class="fas fa-camera"></i> ถ่ายรูปส่งของ (บังคับ)</button>'
       +'<div style="font-size:11px;color:#f59e0b;text-align:center;margin-bottom:10px;">⚠️ ต้องมีรูปก่อนออกจากร้านได้</div>';
 
+  var canDepart=hasPhoto||TEST_MODE;
   var actionHtml=isLast
-    ?'<button class="btn-main" style="background:#7c3aed;" onclick="doDepartShop(true)" '+(hasPhoto?'':'disabled')+'>'
+    ?'<button class="btn-main" style="background:#7c3aed;" onclick="doDepartShop(true)" '+(canDepart?'':'disabled')+'>'
       +'<i class="fas fa-industry"></i> ส่งเสร็จ — กลับบริษัท</button>'
-    :'<button class="btn-main" style="background:#059669;" onclick="doDepartShop(false)" '+(hasPhoto?'':'disabled')+'>'
+    :'<button class="btn-main" style="background:#059669;" onclick="doDepartShop(false)" '+(canDepart?'':'disabled')+'>'
       +'<i class="fas fa-arrow-right"></i> ส่งเสร็จ — ไปร้านถัดไป</button>';
 
   return '<div class="fade-up">'
@@ -697,6 +706,7 @@ function renderCompleted(){
 
 async function doStartTrip(){
   var mile=parseInt((document.getElementById('inp-mile-start')||{}).value||'');
+  if(TEST_MODE&&(!mile||mile<=0))mile=100000; // ค่า default สำหรับทดสอบ
   if(!mile||mile<=0){showToast('❌ กรอกเลขไมล์ออกให้ถูกต้อง',true);return;}
   showL();
   var gps=await requireGPS();if(!gps){hideL();return;}
@@ -720,32 +730,37 @@ async function doArriveAtShop(){
   var seq=_tripLog.current_shop_seq;
   var shops=_tripPlan.shops||[];
   var shop=shops[seq]||{};
-  // Time guard
-  var prev=seq>0?_shopVisits[seq-1]:null;
-  var refTime=prev&&prev.departed_at?prev.departed_at:_tripLog.started_at;
-  var remain=remainSecs(refTime);
-  if(remain>0){showToast('❌ ต้องเดินทางอย่างน้อย '+MIN_TRAVEL_MINS+' นาที (เหลือ '+remain+' วิ)',true);return;}
-  // Mileage guard
+  // Time guard (bypass ใน TEST_MODE)
+  if(!TEST_MODE){
+    var prev=seq>0?_shopVisits[seq-1]:null;
+    var refTime=prev&&prev.departed_at?prev.departed_at:_tripLog.started_at;
+    var remain=remainSecs(refTime);
+    if(remain>0){showToast('❌ ต้องเดินทางอย่างน้อย '+MIN_TRAVEL_MINS+' นาที (เหลือ '+remain+' วิ)',true);return;}
+  }
+  // Mileage guard (bypass ใน TEST_MODE)
   var mile=parseInt((document.getElementById('inp-mile-arr')||{}).value||'');
-  if(!mile||mile<=0){showToast('❌ กรอกเลขไมล์ถึงร้านให้ถูกต้อง',true);return;}
   var minMile=seq>0&&_shopVisits[seq-1]?(_shopVisits[seq-1].mileage_arrival||_tripLog.mileage_start):_tripLog.mileage_start;
+  if(TEST_MODE&&(!mile||mile<=minMile))mile=minMile+10;
+  if(!mile||mile<=0){showToast('❌ กรอกเลขไมล์ถึงร้านให้ถูกต้อง',true);return;}
   if(mile<=minMile){showToast('❌ ไมล์ถึงร้านต้องมากกว่า '+minMile,true);return;}
   showL();
   var gps=await requireGPS();if(!gps){hideL();return;}
-  // Distance guard — ต้องเคลื่อนที่จาก checkpoint ก่อนหน้าอย่างน้อย MIN_MOVE_METERS
-  var prevLat,prevLng;
-  if(seq>0&&_shopVisits[seq-1]){
-    prevLat=_shopVisits[seq-1].lat_depart||_shopVisits[seq-1].lat_arrival;
-    prevLng=_shopVisits[seq-1].lng_depart||_shopVisits[seq-1].lng_arrival;
-  }else{
-    prevLat=_tripLog.lat_start;prevLng=_tripLog.lng_start;
-  }
-  if(prevLat&&prevLng){
-    var moved=Math.round(haversineM(prevLat,prevLng,gps.lat,gps.lng));
-    if(moved<MIN_MOVE_METERS){
-      hideL();
-      showToast('❌ พิกัดยังอยู่ใกล้จุดก่อนหน้าเกินไป (ห่างแค่ '+moved+' ม. ต้องมากกว่า '+MIN_MOVE_METERS+' ม.)',true);
-      return;
+  // Distance guard (bypass ใน TEST_MODE)
+  if(!TEST_MODE){
+    var prevLat,prevLng;
+    if(seq>0&&_shopVisits[seq-1]){
+      prevLat=_shopVisits[seq-1].lat_depart||_shopVisits[seq-1].lat_arrival;
+      prevLng=_shopVisits[seq-1].lng_depart||_shopVisits[seq-1].lng_arrival;
+    }else{
+      prevLat=_tripLog.lat_start;prevLng=_tripLog.lng_start;
+    }
+    if(prevLat&&prevLng){
+      var moved=Math.round(haversineM(prevLat,prevLng,gps.lat,gps.lng));
+      if(moved<MIN_MOVE_METERS){
+        hideL();
+        showToast('❌ พิกัดยังอยู่ใกล้จุดก่อนหน้าเกินไป (ห่างแค่ '+moved+' ม. ต้องมากกว่า '+MIN_MOVE_METERS+' ม.)',true);
+        return;
+      }
     }
   }
   var now=new Date().toISOString();
@@ -778,24 +793,26 @@ function handlePhotoSelected(input){
 }
 
 async function doDepartShop(isLast){
-  if(!_capturedFile){showToast('❌ ต้องถ่ายรูปก่อนออกจากร้าน',true);return;}
+  if(!TEST_MODE&&!_capturedFile){showToast('❌ ต้องถ่ายรูปก่อนออกจากร้าน',true);return;}
   var seq=_tripLog.current_shop_seq;
   var shops=_tripPlan.shops||[];
   showL();
   var gps=await requireGPS();if(!gps){hideL();return;}
   var now=new Date().toISOString();
-  // Upload photo (mandatory)
+  // Upload photo (ข้าม upload ใน TEST_MODE)
   var photoUrl=null;
-  try{
-    var ext=(_capturedFile.name||'photo.jpg').split('.').pop()||'jpg';
-    var path=_tripPlan.plan_id+'/'+seq+'/'+Date.now()+'.'+ext;
-    var {error:ue}=await _sb.storage.from(PHOTO_BUCKET).upload(path,_capturedFile,{contentType:_capturedFile.type||'image/jpeg',upsert:true});
-    if(ue)throw ue;
-    var {data:ud}=_sb.storage.from(PHOTO_BUCKET).getPublicUrl(path);
-    photoUrl=ud.publicUrl;
-  }catch(e){
-    hideL();
-    showToast('❌ อัพโหลดรูปไม่ได้ — ตรวจสอบ Storage Bucket "'+PHOTO_BUCKET+'"',true);return;
+  if(_capturedFile){
+    try{
+      var ext=(_capturedFile.name||'photo.jpg').split('.').pop()||'jpg';
+      var path=_tripPlan.plan_id+'/'+seq+'/'+Date.now()+'.'+ext;
+      var {error:ue}=await _sb.storage.from(PHOTO_BUCKET).upload(path,_capturedFile,{contentType:_capturedFile.type||'image/jpeg',upsert:true});
+      if(ue)throw ue;
+      var {data:ud}=_sb.storage.from(PHOTO_BUCKET).getPublicUrl(path);
+      photoUrl=ud.publicUrl;
+    }catch(e){
+      hideL();
+      showToast('❌ อัพโหลดรูปไม่ได้ — ตรวจสอบ Storage Bucket "'+PHOTO_BUCKET+'"',true);return;
+    }
   }
   // Update shop_visit with departure + photo
   var visit=_shopVisits[seq]||{};
@@ -819,6 +836,7 @@ async function doDepartShop(isLast){
 
 async function doFinishTrip(){
   var mile=parseInt((document.getElementById('inp-mile-end')||{}).value||'');
+  if(TEST_MODE&&(!mile||mile<=_tripLog.mileage_start))mile=(_tripLog.mileage_start||100000)+50;
   if(!mile||mile<=0){showToast('❌ กรอกเลขไมล์กลับให้ถูกต้อง',true);return;}
   if(mile<=_tripLog.mileage_start){showToast('❌ ไมล์กลับต้องมากกว่าไมล์ออก ('+_tripLog.mileage_start+')',true);return;}
   showL();
