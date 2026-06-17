@@ -440,6 +440,28 @@ function renderPlanCards(plans){
     var statusLabel=isComplete?(fail===0?'เสร็จสิ้น':'มีปัญหา'):(done>0?'กำลังดำเนินการ':'รอเริ่ม');
     var statusIcon =isComplete?(fail===0?'fa-check-circle':'fa-exclamation-circle'):(done>0?'fa-truck-moving':'fa-clock');
     var truck=p.truck_plate||(p.child_plate?'แม่+ลูก':'–');
+    // สรุปจุดหมาย
+    var destHtml='';
+    if(shops.length){
+      var sColor={pending:'#94a3b8',delivered:'#34d399',failed:'#f87171'};
+      var sIcon={pending:'fa-circle',delivered:'fa-check-circle',failed:'fa-times-circle'};
+      destHtml='<div style="margin-bottom:14px;background:#0f172a;border-radius:12px;padding:10px 12px;">'
+        +'<div style="font-size:10px;font-weight:900;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">📍 เส้นทาง</div>'
+        +shops.map(function(sh,si){
+          var c=_confs[p.plan_id+'|'+si];
+          var st=c?c.status:'pending';
+          var qty=(sh.items||[]).reduce(function(s,it){return s+(it.qty||0);},0);
+          return '<div style="display:flex;align-items:center;gap:8px;padding:5px 0;'+(si<shops.length-1?'border-bottom:1px solid rgba(255,255,255,.05);':'')+'">'
+            +'<div style="width:22px;height:22px;border-radius:50%;background:#1e293b;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:900;color:#64748b;flex-shrink:0;">'+(si+1)+'</div>'
+            +'<div style="flex:1;min-width:0;">'
+              +'<div style="font-size:13px;font-weight:900;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(sh.shopName||sh.shopId||'–')+'</div>'
+              +(qty>0?'<div style="font-size:10px;color:#64748b;margin-top:1px;">'+qty.toLocaleString()+' ชิ้น</div>':'')
+            +'</div>'
+            +'<i class="fas '+sIcon[st]+'" style="font-size:14px;color:'+sColor[st]+';flex-shrink:0;"></i>'
+          +'</div>';
+        }).join('')
+      +'</div>';
+    }
     return '<div class="fade-up" style="background:#1e293b;border-radius:20px;padding:20px;margin-bottom:12px;border:2px solid '+(isComplete?statusColor:'#334155')+';">'
       // Trip header row
       +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:14px;">'
@@ -452,6 +474,8 @@ function renderPlanCards(plans){
       +'<span style="font-size:11px;color:#94a3b8;font-weight:600;">🚛 '+esc(truck)+'</span>'
       +'</div>'
       +'</div>'
+      // เส้นทาง
+      +destHtml
       // Stats mini
       +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px;">'
       +'<div style="background:#0f172a;border-radius:10px;padding:8px;text-align:center;"><div style="font-weight:900;color:#fff;font-size:18px;">'+total+'</div><div style="font-size:10px;color:#64748b;font-weight:700;">จุดส่ง</div></div>'
