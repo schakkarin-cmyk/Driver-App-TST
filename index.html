@@ -920,7 +920,7 @@ async function doDepartShop(){
   }).eq('plan_id',_tripPlan.plan_id).select().single();
   hideL();
   if(le){showToast('❌ '+le.message,true);return;}
-  if(_shopVisits[seq])_shopVisits[seq]=Object.assign({},_shopVisits[seq],{departed_at:now,lat_depart:gps.lat,lng_depart:gps.lng});
+  _shopVisits[seq]=Object.assign({},_shopVisits[seq]||{},{departed_at:now,lat_depart:gps.lat,lng_depart:gps.lng});
   _tripLog=newLog;_capturedFile=null;_capturedPreviewUrl=null;_selectedShopSeq=null;
   renderTimeline();renderAction();
   showToast(allDone?'✅ ส่งครบ! กลับบริษัทได้เลย':'✅ ออกจากร้าน — เลือกร้านถัดไป');
