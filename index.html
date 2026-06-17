@@ -700,6 +700,8 @@ async function doStartTrip(){
   hideL();
   if(error){showToast('❌ '+error.message,true);return;}
   _tripLog=data;_tripLogs[_tripPlan.plan_id]=data;
+  // อัพเดทสถานะแผนใน WMS → inprogress
+  await _sb.from('logistic_plans').update({status:'inprogress'}).eq('plan_id',_tripPlan.plan_id);
   renderTimeline();renderAction();
   showToast('✅ เริ่มเดินทาง — GPS บันทึกแล้ว (±'+gps.acc+'ม.)');
 }
@@ -803,6 +805,8 @@ async function doFinishTrip(){
   hideL();
   if(error){showToast('❌ '+error.message,true);return;}
   _tripLog=newLog;_tripLogs[_tripPlan.plan_id]=newLog;
+  // อัพเดทสถานะแผนใน WMS → success
+  await _sb.from('logistic_plans').update({status:'success'}).eq('plan_id',_tripPlan.plan_id);
   renderTimeline();renderAction();
   showToast('🎉 จบงานเรียบร้อย!');
 }
