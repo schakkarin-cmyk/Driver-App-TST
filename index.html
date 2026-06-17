@@ -362,11 +362,18 @@ async function loadPlan(){
   document.getElementById('st-done').textContent='0';
   document.getElementById('st-fail').textContent='0';
 
-  if(!_sess.driver_id){renderPlanCards([]);return;}
+  // ต้องมีอย่างน้อย driver_id หรือ driver_name สำหรับ query
+  if(!_sess.driver_id && !_sess.driver_name){renderPlanCards([]);return;}
   showL();
-  var {data:plans,error}=await _sb.from('logistic_plans')
-    .select('plan_id,plan_date,status,truck_plate,child_plate,driver_id,shops,is_mother,is_child,job_type')
-    .eq('plan_date',today).neq('status','success').eq('driver_id',_sess.driver_id);
+  // logistic_plans เก็บชื่อคนขับใน driver_transport (text)
+  // driver_id อาจว่างเปล่า → ใช้ OR เพื่อครอบทั้งสองกรณี
+  var orParts=[];
+  if(_sess.driver_id)   orParts.push('driver_id.eq.'+_sess.driver_id);
+  if(_sess.driver_name) orParts.push('driver_transport.eq.'+_sess.driver_name);
+  var q=_sb.from('logistic_plans')
+    .select('plan_id,plan_date,status,truck_plate,child_plate,driver_id,driver_transport,shops,is_mother,is_child,job_type')
+    .eq('plan_date',today).neq('status','success');
+  var {data:plans,error}=await q.or(orParts.join(','));
   hideL();
   if(error){showToast('❌ โหลดแผนไม่สำเร็จ',true);renderPlanCards([]);return;}
   _plans=plans||[];
