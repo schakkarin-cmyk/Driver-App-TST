@@ -199,6 +199,16 @@ const _sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 // เวลาขั้นต่ำที่ต้องใช้เดินทาง (นาที) — ป้องกันกดมั่ว
 const MIN_TRAVEL_MINS=10;
 const PHOTO_BUCKET='delivery-photos';
+// ระยะขั้นต่ำที่ต้องเคลื่อนที่จาก checkpoint ก่อนหน้า (เมตร) — ป้องกันกดถึงร้านขณะยังไม่ออกจากจุดเดิม
+const MIN_MOVE_METERS=300;
+
+// คำนวนระยะทางระหว่าง 2 พิกัด (Haversine) → เมตร
+function haversineM(lat1,lng1,lat2,lng2){
+  var R=6371000,r=Math.PI/180;
+  var dLat=(lat2-lat1)*r,dLng=(lng2-lng1)*r;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*r)*Math.cos(lat2*r)*Math.sin(dLng/2)*Math.sin(dLng/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
 
 // ── State ────────────────────────────────────────────────────
 var _sess=null;
@@ -722,6 +732,22 @@ async function doArriveAtShop(){
   if(mile<=minMile){showToast('❌ ไมล์ถึงร้านต้องมากกว่า '+minMile,true);return;}
   showL();
   var gps=await requireGPS();if(!gps){hideL();return;}
+  // Distance guard — ต้องเคลื่อนที่จาก checkpoint ก่อนหน้าอย่างน้อย MIN_MOVE_METERS
+  var prevLat,prevLng;
+  if(seq>0&&_shopVisits[seq-1]){
+    prevLat=_shopVisits[seq-1].lat_depart||_shopVisits[seq-1].lat_arrival;
+    prevLng=_shopVisits[seq-1].lng_depart||_shopVisits[seq-1].lng_arrival;
+  }else{
+    prevLat=_tripLog.lat_start;prevLng=_tripLog.lng_start;
+  }
+  if(prevLat&&prevLng){
+    var moved=Math.round(haversineM(prevLat,prevLng,gps.lat,gps.lng));
+    if(moved<MIN_MOVE_METERS){
+      hideL();
+      showToast('❌ พิกัดยังอยู่ใกล้จุดก่อนหน้าเกินไป (ห่างแค่ '+moved+' ม. ต้องมากกว่า '+MIN_MOVE_METERS+' ม.)',true);
+      return;
+    }
+  }
   var now=new Date().toISOString();
   // Insert shop_visit
   var {data:visitData,error:ve}=await _sb.from('shop_visits').insert({
