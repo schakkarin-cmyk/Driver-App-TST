@@ -203,6 +203,8 @@ const PHOTO_BUCKET='delivery-photos';
 const MIN_MOVE_METERS=300;
 // รหัสทดสอบ — bypass GPS, เวลา, รูป, ไมล์ทุกการตรวจสอบ
 const TEST_USERNAMES=['test','ทดสอบ','demo'];
+// bypass เฉพาะ timer (ตั้งค่าต่อคนขับใน WMS)
+var BYPASS_TIMER=false;
 var TEST_MODE=false;
 
 // คำนวนระยะทางระหว่าง 2 พิกัด (Haversine) → เมตร
@@ -329,6 +331,7 @@ async function doLogin(){
   if(data.password!==pwd){err.textContent='รหัสผ่านไม่ถูกต้อง';err.style.display='block';return;}
   _sess={username:data.username,driver_name:data.driver_name,driver_id:data.driver_id};
   TEST_MODE=TEST_USERNAMES.indexOf(data.username.toLowerCase())!==-1;
+  BYPASS_TIMER=TEST_MODE||data.bypass_timer===true;
   sS(_sess);bootMain();
 }
 
@@ -672,7 +675,7 @@ function tickTravelTimer(){
   var elapsed=Math.floor((Date.now()-new Date(refTime).getTime())/1000);
   var m=Math.floor(elapsed/60),s=elapsed%60;
   elEl.textContent=m+' นาที '+p2(s)+' วิ';
-  var remain=TEST_MODE?0:remainSecs(refTime);
+  var remain=BYPASS_TIMER?0:remainSecs(refTime);
   if(remain>0){
     if(cdBox)cdBox.style.display='block';
     if(actionBox)actionBox.style.display='none';
@@ -696,7 +699,7 @@ function tickReturnTimer(){
   var elapsed=Math.floor((Date.now()-new Date(refTime).getTime())/1000);
   var m=Math.floor(elapsed/60),s=elapsed%60;
   elEl.textContent=m+' นาที '+p2(s)+' วิ';
-  var remain=TEST_MODE?0:remainSecs(refTime);
+  var remain=BYPASS_TIMER?0:remainSecs(refTime);
   if(remain>0){
     if(cdBox)cdBox.style.display='block';
     if(finishBox)finishBox.style.display='none';
@@ -841,8 +844,8 @@ async function doArriveAtShop(){
   var shops=_tripPlan.shops||[];
   var shop=shops[seq]||{};
   if(!shop.shopId&&!shop.shopName){showToast('❌ เลือกร้านก่อน',true);return;}
-  // Time guard (bypass ใน TEST_MODE) — ใช้เวลาออกร้านล่าสุด หรือเวลาเริ่มเดินทาง
-  if(!TEST_MODE){
+  // Time guard (bypass ใน BYPASS_TIMER) — ใช้เวลาออกร้านล่าสุด หรือเวลาเริ่มเดินทาง
+  if(!BYPASS_TIMER){
     var lastDepart=_tripLog.started_at;
     Object.values(_shopVisits).forEach(function(sv){
       if(sv.departed_at&&sv.departed_at>lastDepart)lastDepart=sv.departed_at;
