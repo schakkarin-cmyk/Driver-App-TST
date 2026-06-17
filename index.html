@@ -629,7 +629,7 @@ function tickTravelTimer(){
   var elapsed=Math.floor((Date.now()-new Date(refTime).getTime())/1000);
   var m=Math.floor(elapsed/60),s=elapsed%60;
   elEl.textContent=m+' นาที '+p2(s)+' วิ';
-  var remain=remainSecs(refTime);
+  var remain=TEST_MODE?0:remainSecs(refTime);
   if(remain>0){
     if(cdBox)cdBox.style.display='block';
     if(cdEl)cdEl.textContent=remain;
